@@ -1,8 +1,8 @@
-package com.example.TaskManagerApplication.service;
+package com.taskmanager.app.service;
 
-import com.example.TaskManagerApplication.exception.TaskNotFoundException;
-import com.example.TaskManagerApplication.model.Task;
-import com.example.TaskManagerApplication.repository.TaskRepository;
+import com.taskmanager.app.exception.TaskNotFoundException;
+import com.taskmanager.app.model.Task;
+import com.taskmanager.app.repository.TaskRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

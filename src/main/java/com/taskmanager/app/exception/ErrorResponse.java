@@ -1,4 +1,4 @@
-package com.example.TaskManagerApplication.exception;
+package com.taskmanager.app.exception;
 
 import lombok.Getter;
 

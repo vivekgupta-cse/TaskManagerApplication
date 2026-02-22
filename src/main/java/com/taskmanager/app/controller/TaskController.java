@@ -1,7 +1,7 @@
-package com.example.TaskManagerApplication.controller;
+package com.taskmanager.app.controller;
 
-import com.example.TaskManagerApplication.model.Task;
-import com.example.TaskManagerApplication.service.TaskService;
+import com.taskmanager.app.model.Task;
+import com.taskmanager.app.service.TaskService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
