@@ -8,6 +8,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long> {
     // Spring Boot generates all CRUD (Create, Read, Update, Delete) methods for you!
-
-
+    // No code needed! Spring Data JPA generates everything.
 }
