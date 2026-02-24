@@ -6,6 +6,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /*
@@ -37,16 +40,19 @@ public class GlobalExceptionHandler {
     // Example: missing title → "title: Title is required"
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex) {
-        // Collect all field-level validation messages into one string
-        // e.g. "title: Title is required; description: Description cannot exceed 500 characters"
-        String message = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
-                .collect(Collectors.joining("; "));
-        ErrorResponse error = new ErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),         // 400
-                HttpStatus.BAD_REQUEST.getReasonPhrase(), // "Bad Request"
-                message
+        // 1. Create a map of all field errors
+        Map<String, String> fieldErrors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(error ->
+                fieldErrors.put(error.getField(), error.getDefaultMessage())
         );
+        // 2. Build the structured response
+        ErrorResponse error = ErrorResponse.builder()
+                .status(HttpStatus.BAD_REQUEST.value())           // 400
+                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())  // "Bad Request"
+                .message("Validation failed for one or more fields")
+                .errors(fieldErrors) // Plug in the map here
+                .timestamp(LocalDateTime.now())
+                .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
@@ -59,6 +65,19 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(DuplicateTaskException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateTask(DuplicateTaskException ex) {
+        ErrorResponse error = ErrorResponse.builder()
+                .status(HttpStatus.CONFLICT.value()) // 409 Conflict
+                .error("Conflict")
+                .message(ex.getMessage())
+                .timestamp(LocalDateTime.now())
+                // We don't call .errors() here because there's no map for this error
+                .build();
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
     // Catch-all for any other unexpected exception → 500 Internal Server Error

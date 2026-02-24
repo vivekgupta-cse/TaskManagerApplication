@@ -2,6 +2,7 @@ package com.taskmanager.app.service;
 
 import com.taskmanager.app.dto.TaskRequestDTO;
 import com.taskmanager.app.dto.TaskResponseDTO;
+import com.taskmanager.app.exception.DuplicateTaskException;
 import com.taskmanager.app.exception.TaskNotFoundException;
 import com.taskmanager.app.mapper.TaskMapper;
 import com.taskmanager.app.model.Task;
@@ -37,6 +38,10 @@ public class TaskService {
     // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
     @Transactional  // If anything fails, the whole operation is rolled back
     public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
+        // Business Validation
+        if (taskRepository.existsByHeaderAndCompletedFalse(requestDto.getTitle())) {
+            throw new DuplicateTaskException("You already have an active task with this title!");
+        }
         Task taskEntity = taskMapper.toEntity(requestDto); // RequestDTO → Entity (id is null, DB assigns it)
         Task savedTask  = taskRepository.save(taskEntity); // INSERT into DB
         return taskMapper.toDTO(savedTask);                // Entity → ResponseDTO (with DB-generated id)
