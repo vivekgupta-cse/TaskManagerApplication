@@ -1,7 +1,6 @@
 # TaskManager Application — Design Document & Tutorial
 
-> **File:** `docs/DESIGN_AND_TUTORIAL.md`
-> **Last Updated:** February 2026
+> **Last Updated:** February 24, 2026
 
 ---
 
@@ -12,14 +11,14 @@
 3. [Architecture](#3-architecture)
 4. [Project Structure](#4-project-structure)
 5. [Layer-by-Layer Explanation](#5-layer-by-layer-explanation)
-   - [Entry Point](#51-entry-point--taskmanagerapplicationjava)
-   - [Model (Entity)](#52-model-entity--taskjava)
-   - [DTO](#53-dto--taskresponsedtojava)
-   - [Mapper](#54-mapper--taskmapperjava)
-   - [Repository](#55-repository--taskrepositoryj)
-   - [Service](#56-service--taskservicejava)
-   - [Controller](#57-controller--taskcontrollerjava)
-   - [Exception Handling](#58-exception-handling)
+   - [5.1 Entry Point](#51-entry-point)
+   - [5.2 Model — Entity](#52-model--entity)
+   - [5.3 DTOs — Request and Response](#53-dtos--request-and-response)
+   - [5.4 Mapper](#54-mapper)
+   - [5.5 Repository](#55-repository)
+   - [5.6 Service](#56-service)
+   - [5.7 Controller](#57-controller)
+   - [5.8 Exception Handling](#58-exception-handling)
 6. [Configuration — application.yaml](#6-configuration--applicationyaml)
 7. [Build Configuration — build.gradle.kts](#7-build-configuration--buildgradlekts)
 8. [Data Flow — Request Lifecycle](#8-data-flow--request-lifecycle)
@@ -35,7 +34,7 @@ The **TaskManager Application** is a production-style RESTful web service for ma
 It demonstrates a real-world layered architecture with proper separation of concerns,
 custom exception handling, object mapping, and structured logging.
 
-The API is available at: `http://localhost:9090/api/tasks`
+**API base URL:** `http://localhost:9090/api/tasks`
 
 ---
 
@@ -43,15 +42,15 @@ The API is available at: `http://localhost:9090/api/tasks`
 
 | Technology | Version | Purpose |
 |---|---|---|
-| **Java** | 25 | Programming language |
-| **Spring Boot** | 4.0.3 | Web framework & auto-configuration |
-| **Spring Data JPA** | (managed by Spring Boot) | Database access layer |
-| **Hibernate** | (managed by Spring Boot) | ORM — translates Java objects ↔ SQL |
-| **PostgreSQL** | Latest (via Docker) | Production database |
-| **Lombok** | Latest | Eliminates boilerplate code at compile time |
-| **MapStruct** | 1.6.0.Beta1 | Auto-generates Entity ↔ DTO converters |
-| **Gradle** | Latest wrapper | Build tool |
-| **Logback** | (managed by Spring Boot) | Structured logging with file rolling |
+| Java | 25 | Programming language |
+| Spring Boot | 4.0.3 | Web framework and auto-configuration |
+| Spring Data JPA | (managed by Spring Boot) | Database access layer |
+| Hibernate | (managed by Spring Boot) | ORM — translates Java objects to/from SQL |
+| PostgreSQL | Latest (via Docker) | Production database |
+| Lombok | Latest | Eliminates boilerplate code at compile time |
+| MapStruct | 1.6.0.Beta1 | Auto-generates Entity ↔ DTO converters at compile time |
+| Gradle | 9.3.0 (wrapper) | Build tool |
+| Logback | (managed by Spring Boot) | Structured logging with rolling file support |
 
 ---
 
@@ -61,49 +60,49 @@ The application follows the classic **Layered (N-Tier) Architecture** pattern.
 Each layer has one responsibility and communicates only with the layer directly below it.
 
 ```
- ┌───────────────────────────────────────────────────────┐
- │               CLIENT  (curl / browser / Postman)      │
- └───────────────────────────┬───────────────────────────┘
-                             │  HTTP Request (JSON)
-                             ▼
- ┌───────────────────────────────────────────────────────┐
- │                   CONTROLLER LAYER                    │
- │               TaskController.java                     │
- │   - Receives HTTP requests                            │
- │   - Validates path variables / request body           │
- │   - Delegates to Service                              │
- │   - Returns HTTP responses                            │
- └───────────────────────────┬───────────────────────────┘
-                             │  calls with DTO
-                             ▼
- ┌───────────────────────────────────────────────────────┐
- │                    SERVICE LAYER                      │
- │                 TaskService.java                      │
- │   - Contains ALL business logic                       │
- │   - Converts DTO ↔ Entity using TaskMapper            │
- │   - Calls Repository for data access                  │
- │   - Throws custom exceptions (TaskNotFoundException)  │
- └───────────────────────────┬───────────────────────────┘
-                             │  calls with Entity
-                             ▼
- ┌───────────────────────────────────────────────────────┐
- │                  REPOSITORY LAYER                     │
- │               TaskRepository.java                     │
- │   - Interface only — no code written by you           │
- │   - Spring Data JPA auto-generates all SQL queries    │
- └───────────────────────────┬───────────────────────────┘
-                             │  SQL (via Hibernate/JDBC)
-                             ▼
- ┌───────────────────────────────────────────────────────┐
- │             DATABASE  (PostgreSQL via Docker)         │
- │                      tasks table                      │
- └───────────────────────────────────────────────────────┘
++----------------------------------------------------------+
+|            CLIENT  (curl / browser / Postman)            |
++----------------------------+-----------------------------+
+                             |  HTTP Request (JSON)
+                             v
++----------------------------------------------------------+
+|                    CONTROLLER LAYER                      |
+|                  TaskController.java                     |
+|  - Receives HTTP requests                                |
+|  - Validates request body (@Valid)                       |
+|  - Delegates to Service layer                            |
+|  - Returns HTTP responses                                |
++----------------------------+-----------------------------+
+                             |  TaskRequestDTO / id
+                             v
++----------------------------------------------------------+
+|                     SERVICE LAYER                        |
+|                   TaskService.java                       |
+|  - Contains ALL business logic                           |
+|  - Converts DTO <-> Entity using TaskMapper              |
+|  - Calls Repository for data access                      |
+|  - Throws custom exceptions (TaskNotFoundException)      |
++----------------------------+-----------------------------+
+                             |  Task (Entity)
+                             v
++----------------------------------------------------------+
+|                   REPOSITORY LAYER                       |
+|                 TaskRepository.java                      |
+|  - Interface only — no code written by you               |
+|  - Spring Data JPA auto-generates all SQL queries        |
++----------------------------+-----------------------------+
+                             |  SQL via Hibernate / JDBC
+                             v
++----------------------------------------------------------+
+|           DATABASE  (PostgreSQL running in Docker)       |
+|                        tasks table                       |
++----------------------------------------------------------+
 
- ┌───────────────────────────────────────────────────────┐
- │              CROSS-CUTTING CONCERNS                   │
- │  GlobalExceptionHandler → intercepts ALL exceptions   │
- │  Logback                → writes logs to file + console│
- └───────────────────────────────────────────────────────┘
++----------------------------------------------------------+
+|                 CROSS-CUTTING CONCERNS                   |
+|  GlobalExceptionHandler — intercepts ALL exceptions      |
+|  Logback                — writes structured logs to file |
++----------------------------------------------------------+
 ```
 
 **The Golden Rule:** Each layer only talks to the layer directly below it.
@@ -115,57 +114,51 @@ The Controller **never** touches the Repository or the database directly.
 
 ```
 TaskManagerApplication/
-├── build.gradle.kts                          ← Build config: dependencies, plugins
-├── docker-compose.yml                        ← Starts PostgreSQL in Docker
-├── src/
-│   ├── main/
-│   │   ├── java/com/taskmanager/app/
-│   │   │   ├── TaskManagerApplication.java   ← main() — application entry point
-│   │   │   │
-│   │   │   ├── controller/
-│   │   │   │   └── TaskController.java       ← HTTP layer: receives & returns JSON
-│   │   │   │
-│   │   │   ├── service/
-│   │   │   │   └── TaskService.java          ← Business logic layer
-│   │   │   │
-│   │   │   ├── repository/
-│   │   │   │   └── TaskRepository.java       ← Database layer (auto-implemented)
-│   │   │   │
-│   │   │   ├── model/
-│   │   │   │   └── Task.java                 ← JPA Entity (maps to 'tasks' DB table)
-│   │   │   │
-│   │   │   ├── dto/
-│   │   │   │   └── TaskResponseDTO.java      ← API contract (what clients see)
-│   │   │   │
-│   │   │   ├── mapper/
-│   │   │   │   └── TaskMapper.java           ← MapStruct: Entity ↔ DTO conversion
-│   │   │   │
-│   │   │   └── exception/
-│   │   │       ├── GlobalExceptionHandler.java  ← Catches ALL exceptions centrally
-│   │   │       ├── TaskNotFoundException.java   ← Custom 404 exception
-│   │   │       └── ErrorResponse.java           ← Structured error JSON shape
-│   │   │
-│   │   └── resources/
-│   │       └── application.yaml              ← DB config, port, logging config
-│   │
-│   └── test/
-│       └── java/com/taskmanager/app/
-│           ├── controller/
-│           │   └── TaskControllerTest.java   ← Unit tests for Controller
-│           ├── service/
-│           │   └── TaskServiceTest.java      ← Unit tests for Service
-│           └── exception/
-│               └── GlobalExceptionHandlerTest.java
-│
-└── logs/
-    └── app.log                               ← Rolling log file output
++-- build.gradle.kts                           <- Build config: dependencies, plugins
++-- docker-compose.yml                         <- Starts PostgreSQL in Docker
++-- src/
+|   +-- main/
+|   |   +-- java/com/taskmanager/app/
+|   |   |   +-- TaskManagerApplication.java       <- main() — application entry point
+|   |   |   +-- controller/
+|   |   |   |   +-- TaskController.java           <- HTTP layer: receives and returns JSON
+|   |   |   +-- service/
+|   |   |   |   +-- TaskService.java              <- Business logic layer
+|   |   |   +-- repository/
+|   |   |   |   +-- TaskRepository.java           <- DB layer (auto-implemented by Spring)
+|   |   |   +-- model/
+|   |   |   |   +-- Task.java                     <- JPA Entity — maps to 'tasks' DB table
+|   |   |   +-- dto/
+|   |   |   |   +-- TaskRequestDTO.java           <- Input contract (POST/PUT request body)
+|   |   |   |   +-- TaskResponseDTO.java          <- Output contract (all responses)
+|   |   |   +-- mapper/
+|   |   |   |   +-- TaskMapper.java               <- MapStruct: Entity <-> DTO conversion
+|   |   |   +-- exception/
+|   |   |       +-- GlobalExceptionHandler.java   <- Catches ALL exceptions centrally
+|   |   |       +-- TaskNotFoundException.java    <- Custom 404 exception
+|   |   |       +-- ErrorResponse.java            <- Structured error JSON shape
+|   |   +-- resources/
+|   |       +-- application.yaml                  <- DB config, port, logging
+|   +-- test/
+|       +-- java/com/taskmanager/app/
+|           +-- TaskManagerApplicationTests.java   <- Spring context smoke test
+|           +-- controller/                        <- (empty — tests not yet written)
+|           +-- service/                           <- (empty — tests not yet written)
+|           +-- exception/                         <- (empty — tests not yet written)
++-- logs/
+|   +-- app.log                                <- Rolling log file output
++-- build/
+    +-- generated/sources/annotationProcessor/
+        +-- ...TaskMapperImpl.java             <- MapStruct-generated implementation
 ```
 
 ---
 
 ## 5. Layer-by-Layer Explanation
 
-### 5.1 Entry Point — `TaskManagerApplication.java`
+### 5.1 Entry Point
+
+**`TaskManagerApplication.java`**
 
 ```java
 @SpringBootApplication
@@ -186,138 +179,182 @@ public class TaskManagerApplication {
 
 When `main()` runs, Spring Boot:
 1. Starts an embedded **Tomcat** web server on port **9090**
-2. Connects to **PostgreSQL** using credentials in `application.yaml`
+2. Connects to **PostgreSQL** using credentials from `application.yaml`
 3. Scans all classes annotated with `@RestController`, `@Service`, `@Repository`, etc.
 4. Wires them all together via **Dependency Injection**
 
 ---
 
-### 5.2 Model (Entity) — `Task.java`
+### 5.2 Model — Entity
 
-The `Task` class represents a **row in the database**. JPA/Hibernate reads this class
-and creates (or updates) the `tasks` table automatically.
+**`Task.java`**
 
 ```java
 @Entity                     // Hibernate: manage this class as a database table
 @Table(name = "tasks")      // The table will be named "tasks"
-@Data                       // Lombok: generates getters, setters, toString, equals, hashCode
-@NoArgsConstructor          // Lombok: generates empty constructor (REQUIRED by JPA)
-@AllArgsConstructor         // Lombok: generates constructor with all fields
+@Data                       // Lombok: getters, setters, toString, equals, hashCode
+@NoArgsConstructor          // Lombok: empty constructor — REQUIRED by JPA
+@AllArgsConstructor         // Lombok: constructor with all fields
 public class Task {
 
-    @Id                                                    // Primary Key
-    @GeneratedValue(strategy = GenerationType.IDENTITY)    // Auto-increment: 1, 2, 3...
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)  // Auto-increment: 1, 2, 3...
     private Long id;
 
-    @Column(nullable = false, name = "title")  // DB column named "title", cannot be NULL
-    private String header;                     // Java field is named differently!
+    @Column(nullable = false, name = "title")  // DB column is "title", cannot be NULL
+    private String header;                     // Java field is "header" — intentionally different!
 
-    private String description;                // Maps to column "description"
+    private String description;
 
     @Column(nullable = false, columnDefinition = "boolean default false")
-    private boolean completed;                 // Cannot be NULL, defaults to false
+    private boolean completed;                 // primitive boolean — cannot be NULL
 }
 ```
 
-**Important naming mismatch:**
-The Java field is `header` but the database column is `title`.
-This is handled by `@Column(name = "title")` and explicitly mapped in `TaskMapper`.
+**Key detail — intentional naming mismatch:**
+
+| Location | Name used |
+|---|---|
+| Java field | `header` |
+| Database column | `title` (via `@Column(name = "title")`) |
+| Client JSON (in and out) | `title` |
+
+This mismatch is bridged by `TaskMapper` using `@Mapping(source = "header", target = "title")`.
 
 **Resulting database table:**
 
 ```
 tasks table (PostgreSQL):
-┌────┬─────────────────────────┬──────────────────────────┬───────────┐
-│ id │          title          │       description        │ completed │
-├────┼─────────────────────────┼──────────────────────────┼───────────┤
-│  1 │ Learn Spring Boot       │ Mastering the basics     │   false   │
-│  2 │ Write Unit Tests        │ 100% coverage goal       │   true    │
-│  3 │ Deploy to Production    │ Use Docker               │   false   │
-└────┴─────────────────────────┴──────────────────────────┴───────────┘
++----+----------------------+------------------------+-----------+
+| id |        title         |      description       | completed |
++----+----------------------+------------------------+-----------+
+|  1 | Learn Spring Boot    | Mastering the basics   |   false   |
+|  2 | Write Unit Tests     | 100% coverage goal     |   true    |
+|  3 | Deploy to Production | Use Docker             |   false   |
++----+----------------------+------------------------+-----------+
 ```
 
 ---
 
-### 5.3 DTO — `TaskResponseDTO.java`
+### 5.3 DTOs — Request and Response
 
-A **Data Transfer Object (DTO)** is what the API exposes to clients.
-It is deliberately different from the Entity.
+The application uses **two separate DTOs** — one for input, one for output.
+This is the correct production pattern: **never expose your Entity directly over HTTP.**
+
+#### `TaskRequestDTO.java` — what clients SEND (POST / PUT body)
 
 ```java
-@Data                       // Lombok: getters, setters, toString, equals, hashCode
-public class TaskResponseDTO {
-    private Long id;
-    private String title;            // Named "title" (matches what clients expect)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class TaskRequestDTO {
+
+    @NotBlank(message = "Title is required")
+    @Size(min = 3, max = 100, message = "Title must be between 3 and 100 characters")
+    private String title;
+
+    @Size(max = 500, message = "Description cannot exceed 500 characters")
     private String description;
-    private boolean completed;
-    private String completionStatus; // EXTRA field — does NOT exist in the DB!
+
+    @NotNull(message = "Completion status must be specified")
+    private boolean completed;  // boolean primitive — Lombok generates isCompleted()
 }
 ```
 
-**Why use a DTO instead of returning the Entity directly?**
+- **No `id` field** — the database always generates it; clients must never send it
+- **No `completionStatus`** — this is server-computed, clients never send it
+- **Validation annotations** — `@NotBlank`, `@Size`, `@NotNull` enforce input rules
+- **`boolean` primitive** (not `Boolean` wrapper) — Lombok generates `isCompleted()`, not `getCompleted()`
+
+#### `TaskResponseDTO.java` — what clients RECEIVE (all responses)
+
+```java
+@Data
+public class TaskResponseDTO {
+    private Long id;
+    private String title;
+    private String description;
+    private boolean completed;
+    private String completionStatus; // server-computed: "DONE" or "PENDING" — NOT in the DB
+}
+```
+
+**Why two separate DTOs?**
 
 ```
-Task Entity (internal)          TaskResponseDTO (external / API contract)
-┌──────────────────┐           ┌───────────────────────────────┐
-│ id               │           │ id                            │
-│ header    ───────┼──────────►│ title      (renamed!)         │
-│ description ─────┼──────────►│ description                   │
-│ completed ───────┼──────────►│ completed                     │
-│                  │           │ completionStatus  (computed!)  │
-│                  │           │   "DONE" or "PENDING"         │
-└──────────────────┘           └───────────────────────────────┘
-
-Fields you could HIDE in DTO:
- - password (never send to client!)
- - internalAuditLog
- - createdBy / updatedAt (internal tracking)
+TaskRequestDTO (CLIENT -> SERVER)       TaskResponseDTO (SERVER -> CLIENT)
++------------------------------+        +-----------------------------------+
+| title       @NotBlank        |        | id            (DB generated)      |
+|             @Size(min=3,     |        | title                             |
+|                   max=100)   |        | description                       |
+| description @Size(max=500)   |        | completed                         |
+| completed   @NotNull         |        | completionStatus  "DONE"/"PENDING" |
+|                              |        |                   (server-computed)|
+| NO id                        |        |                                   |
+| NO completionStatus          |        |                                   |
++------------------------------+        +-----------------------------------+
 ```
 
-Key benefits:
-1. **Security** — sensitive fields (passwords, etc.) never leave the server
-2. **Flexibility** — you can rename, reshape, or add computed fields
-3. **Stability** — you can change the DB schema without breaking API clients
+| Concern | `TaskRequestDTO` | `TaskResponseDTO` |
+|---|---|---|
+| Has `id`? | No — DB generates it | Yes |
+| Has validation? | Yes — `@NotBlank`, `@Size`, `@NotNull` | No — output needs none |
+| Has `completionStatus`? | No — server computes it | Yes |
+| Direction | Client to Server | Server to Client |
+| Mass-assignment safe? | Yes — client can never set the `id` | N/A |
 
 ---
 
-### 5.4 Mapper — `TaskMapper.java`
+### 5.4 Mapper
 
-The Mapper converts between `Task` (Entity) and `TaskResponseDTO` (DTO).
-Instead of writing this manually, **MapStruct** generates the code at compile time.
+**`TaskMapper.java`**
 
 ```java
-@Mapper(componentModel = "spring")  // Makes this a Spring Bean (injectable)
+@Mapper(componentModel = "spring")  // Makes this a Spring Bean — injectable via constructor
 public interface TaskMapper {
 
-    // Entity → DTO
-    @Mapping(source = "header", target = "title")  // header → title (field rename)
+    // Entity -> ResponseDTO  (used after every read and write)
+    @Mapping(source = "header", target = "title")  // header (Java) -> title (JSON)
     @Mapping(
         target = "completionStatus",
-        expression = "java(task.isCompleted() ? \"DONE\" : \"PENDING\")"  // computed!
+        expression = "java(task.isCompleted() ? \"DONE\" : \"PENDING\")"
     )
     TaskResponseDTO toDTO(Task task);
 
-    // DTO → Entity (inverse of the above, auto-derived by MapStruct)
-    @InheritInverseConfiguration   // Reverses all mappings: title → header
-    Task toEntity(TaskResponseDTO dto);
+    // RequestDTO -> Entity  (used by createTask and updateTask)
+    @Mapping(source = "title", target = "header")  // title (JSON) -> header (Java)
+    @Mapping(target = "id", ignore = true)          // id is always DB-generated — never from client
+    Task toEntity(TaskRequestDTO dto);
 }
 ```
 
-MapStruct generates the actual implementation at **compile time**.
-You can see the generated code at:
+MapStruct reads this interface at **compile time** and generates `TaskMapperImpl.java` automatically.
+You write only the interface — MapStruct writes all the boring conversion code for you.
+
+**The two mapping directions:**
+
+```
+TaskRequestDTO --toEntity()--> Task (Entity) --toDTO()--> TaskResponseDTO
+ (client input)                 (database row)              (client output)
+```
+
+The generated implementation can be found at:
 ```
 build/generated/sources/annotationProcessor/java/main/
-  com/taskmanager/app/mapper/TaskMapperImpl.java
+    com/taskmanager/app/mapper/TaskMapperImpl.java
 ```
 
 ---
 
-### 5.5 Repository — `TaskRepository.java`
+### 5.5 Repository
+
+**`TaskRepository.java`**
 
 ```java
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long> {
-    // No code needed! Spring Data JPA generates everything.
+    // No code needed — Spring Data JPA generates all SQL operations automatically!
 }
 ```
 
@@ -327,63 +364,66 @@ By extending `JpaRepository<Task, Long>`, Spring automatically provides:
 |---|---|
 | `findAll()` | `SELECT * FROM tasks` |
 | `findById(id)` | `SELECT * FROM tasks WHERE id = ?` |
-| `save(task)` | `INSERT INTO tasks ...` or `UPDATE tasks ...` |
+| `save(task)` | `INSERT INTO tasks ...` or `UPDATE tasks SET ... WHERE id = ?` |
 | `delete(task)` | `DELETE FROM tasks WHERE id = ?` |
-| `deleteById(id)` | `DELETE FROM tasks WHERE id = ?` |
 | `existsById(id)` | `SELECT COUNT(*) > 0 FROM tasks WHERE id = ?` |
 | `count()` | `SELECT COUNT(*) FROM tasks` |
 
-`JpaRepository<Task, Long>` — the two type parameters mean:
-- `Task` — the entity this repository manages
-- `Long` — the data type of the primary key (`id` field)
+The two type parameters `JpaRepository<Task, Long>` mean:
+- `Task` — the Entity this repository manages
+- `Long` — the data type of the primary key
+
+`findById()` returns `Optional<Task>` — not `Task` directly.
+This forces you to explicitly handle the "not found" case (see Service below).
 
 ---
 
-### 5.6 Service — `TaskService.java`
+### 5.6 Service
 
-The Service layer is the heart of the application. **All business logic lives here.**
-The Controller only calls the Service — it never directly accesses the database.
+**`TaskService.java`**
 
 ```java
-@Service                   // Marks this as a Spring managed service bean
+@Service                   // Marks this as a Spring-managed service bean
 @RequiredArgsConstructor   // Lombok: generates constructor for all 'final' fields
 public class TaskService {
 
-    private final TaskRepository taskRepository; // injected by Spring
-    private final TaskMapper taskMapper;         // injected by Spring
+    private final TaskRepository taskRepository;
+    private final TaskMapper taskMapper;
 
     // READ ALL
     public List<TaskResponseDTO> getAllTasks() {
-        return taskRepository.findAll()   // SELECT * FROM tasks  → List<Task>
+        return taskRepository.findAll()    // SELECT * FROM tasks -> List<Task>
                 .stream()
-                .map(taskMapper::toDTO)   // Each Task → TaskResponseDTO
-                .toList();                // Collect into a new list (safe, defensive copy)
+                .map(taskMapper::toDTO)    // each Task -> TaskResponseDTO
+                .toList();                 // collect into new list (safe defensive copy)
     }
 
     // READ ONE
     public TaskResponseDTO getTaskById(Long id) {
         Task task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id));  // throws 404 if missing
+                .orElseThrow(() -> new TaskNotFoundException(id));  // throws 404 if not found
         return taskMapper.toDTO(task);
     }
 
     // CREATE
-    @Transactional  // If anything fails, the whole operation is rolled back
-    public TaskResponseDTO createTask(TaskResponseDTO dto) {
-        Task taskEntity = taskMapper.toEntity(dto); // DTO → Entity
-        Task savedTask  = taskRepository.save(taskEntity); // INSERT into DB
-        return taskMapper.toDTO(savedTask);          // Entity → DTO (with generated id)
+    @Transactional
+    public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
+        Task taskEntity = taskMapper.toEntity(requestDto); // DTO -> Entity (id is null here)
+        Task savedTask  = taskRepository.save(taskEntity); // INSERT — DB assigns the id
+        return taskMapper.toDTO(savedTask);                // Entity -> ResponseDTO (with real id)
     }
 
     // UPDATE
     @Transactional
-    public TaskResponseDTO updateTask(Long id, TaskResponseDTO taskDetailsDto) {
+    public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
         Task existingTask = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id));  // 404 if not found
-        existingTask.setHeader(taskDetailsDto.getTitle());
-        existingTask.setDescription(taskDetailsDto.getDescription());
-        existingTask.setCompleted(taskDetailsDto.isCompleted());
-        Task updatedTask = taskRepository.save(existingTask);       // UPDATE in DB
+                .orElseThrow(() -> new TaskNotFoundException(id));
+
+        existingTask.setHeader(requestDto.getTitle());
+        existingTask.setDescription(requestDto.getDescription());
+        existingTask.setCompleted(requestDto.isCompleted()); // boolean primitive -> isCompleted()
+
+        Task updatedTask = taskRepository.save(existingTask); // UPDATE in DB
         return taskMapper.toDTO(updatedTask);
     }
 
@@ -391,73 +431,66 @@ public class TaskService {
     @Transactional
     public void deleteTask(Long id) {
         Task task = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id));  // 404 if not found
-        taskRepository.delete(task);                                // DELETE from DB
+                .orElseThrow(() -> new TaskNotFoundException(id));
+        taskRepository.delete(task);
     }
 }
 ```
 
 **Why `@Transactional`?**
-It wraps the operation in a database transaction. If an exception occurs mid-way
-(e.g., DB connection drops), all changes are **rolled back** automatically.
-Without it, you could end up with partial writes corrupting your data.
+It wraps the entire method in a database transaction. If an exception occurs mid-way
+(e.g., DB connection drops after a partial write), all changes are **rolled back** automatically.
+Without it, you could end up with corrupt partial writes in the database.
 
 ---
 
-### 5.7 Controller — `TaskController.java`
+### 5.7 Controller
 
-The Controller is the **front door** of the application. It has exactly three jobs:
-1. Receive the HTTP request
-2. Call the Service
-3. Return the HTTP response
+**`TaskController.java`**
 
 ```java
-@RestController               // = @Controller + @ResponseBody (auto-convert return value to JSON)
-@RequestMapping("/api/tasks") // All endpoints in this class are under /api/tasks
-@RequiredArgsConstructor      // Lombok: constructor injection for 'taskService'
+@RestController               // = @Controller + @ResponseBody — auto-converts returns to JSON
+@RequestMapping("/api/tasks") // All endpoints in this class are prefixed with /api/tasks
+@RequiredArgsConstructor
 public class TaskController {
 
     private final TaskService taskService;
 
-    // GET /api/tasks  → returns all tasks as JSON array
     @GetMapping
     public List<TaskResponseDTO> getAllTasks() {
         return taskService.getAllTasks();
     }
 
-    // GET /api/tasks/5  → returns single task or 404
     @GetMapping("/{id}")
     public TaskResponseDTO getTaskById(@PathVariable Long id) {
         return taskService.getTaskById(id);
     }
 
-    // POST /api/tasks  → creates a new task, returns the saved task (with DB-assigned id)
+    // @Valid triggers @NotBlank / @Size / @NotNull on TaskRequestDTO — 400 Bad Request if invalid
     @PostMapping
-    public TaskResponseDTO createTask(@RequestBody TaskResponseDTO newTaskDto) {
-        return taskService.createTask(newTaskDto);
+    public TaskResponseDTO createTask(@Valid @RequestBody TaskRequestDTO requestDto) {
+        return taskService.createTask(requestDto);
     }
 
-    // PUT /api/tasks/5  → updates existing task
     @PutMapping("/{id}")
     public TaskResponseDTO updateTask(@PathVariable Long id,
-                                      @RequestBody TaskResponseDTO taskDetailsDto) {
-        return taskService.updateTask(id, taskDetailsDto);
+                                      @Valid @RequestBody TaskRequestDTO requestDto) {
+        return taskService.updateTask(id, requestDto);
     }
 
-    // DELETE /api/tasks/5  → deletes a task, returns HTTP 204 No Content
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
         taskService.deleteTask(id);
-        return ResponseEntity.noContent().build();  // 204 — success, nothing to return
+        return ResponseEntity.noContent().build();  // HTTP 204 — success, no response body
     }
 }
 ```
 
-**Key annotations explained:**
+**Key annotations:**
 
 | Annotation | Meaning |
 |---|---|
-| `@RestController` | All methods return data (JSON), not view names |
+| `@RestController` | All methods return data (JSON), not HTML view names |
 | `@RequestMapping` | Base URL prefix for the whole class |
 | `@GetMapping` | Maps HTTP GET requests |
 | `@PostMapping` | Maps HTTP POST requests |
@@ -465,6 +498,7 @@ public class TaskController {
 | `@DeleteMapping` | Maps HTTP DELETE requests |
 | `@PathVariable` | Extracts `{id}` from the URL path |
 | `@RequestBody` | Deserializes the JSON request body into a Java object |
+| `@Valid` | Triggers Bean Validation on the annotated parameter |
 
 ---
 
@@ -480,20 +514,21 @@ public class TaskNotFoundException extends RuntimeException {
 }
 ```
 
-A custom exception that carries a meaningful message.
-It extends `RuntimeException` so it does **not** need to be declared with `throws`.
+Extends `RuntimeException` so it does **not** need to be declared with `throws` on method signatures.
+
+---
 
 #### `ErrorResponse.java`
 
 The structured JSON shape returned for every error:
 
 ```java
-@Getter
+@Getter  // Jackson needs getters to serialize fields to JSON
 public class ErrorResponse {
-    private final int status;             // e.g. 404
-    private final String error;           // e.g. "Not Found"
-    private final String message;         // e.g. "Task with ID 99 not found"
-    private final LocalDateTime timestamp; // e.g. "2026-02-24T10:30:00"
+    private final int status;              // HTTP status code, e.g. 404
+    private final String error;            // HTTP status phrase, e.g. "Not Found"
+    private final String message;          // Human-readable description of the problem
+    private final LocalDateTime timestamp; // When the error occurred — auto-set in constructor
 
     public ErrorResponse(int status, String error, String message) {
         this.status    = status;
@@ -504,55 +539,89 @@ public class ErrorResponse {
 }
 ```
 
+---
+
 #### `GlobalExceptionHandler.java`
 
 ```java
-@RestControllerAdvice  // Intercepts exceptions thrown from ANY @RestController
+@RestControllerAdvice  // Intercepts exceptions thrown from ANY @RestController globally
 public class GlobalExceptionHandler {
 
-    // Handles TaskNotFoundException → HTTP 404
+    // TaskNotFoundException -> HTTP 404
     @ExceptionHandler(TaskNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTaskNotFound(TaskNotFoundException ex) {
-        ErrorResponse error = new ErrorResponse(404, "Not Found", ex.getMessage());
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.NOT_FOUND.value(),           // 404
+                HttpStatus.NOT_FOUND.getReasonPhrase(), // "Not Found"
+                ex.getMessage()                         // "Task with ID 99 not found"
+        );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
-    // Handles invalid input → HTTP 400
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException ex) {
-        ErrorResponse error = new ErrorResponse(400, "Bad Request", ex.getMessage());
+    // @Valid failures (@NotBlank, @Size, @NotNull violated) -> HTTP 400
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                message
+        );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
-    // Catch-all for any unexpected exception → HTTP 500
-    // NOTE: Never expose ex.getMessage() here — it may leak internal details!
+    // IllegalArgumentException -> HTTP 400
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException ex) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    // Catch-all -> HTTP 500
+    // NEVER expose ex.getMessage() here — it may leak internal implementation details!
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
-        ErrorResponse error = new ErrorResponse(500, "Internal Server Error",
-                "Something went wrong. Please try again later.");
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+                "Something went wrong. Please try again later."
+        );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 }
 ```
 
-**How it works — the exception flow:**
+**How the exception flow works — example:**
 
 ```
 GET /api/tasks/999
-       ↓
+       |
+       v
   TaskController.getTaskById(999)
-       ↓
+       |
+       v
   taskService.getTaskById(999)
-       ↓
-  taskRepository.findById(999)  →  returns Optional.empty()
-       ↓
-  .orElseThrow(...)  →  throws TaskNotFoundException("Task with ID 999 not found")
-       ↓
-  Spring intercepts the exception
-       ↓
+       |
+       v
+  taskRepository.findById(999)  ->  Optional.empty()
+       |
+       v
+  .orElseThrow()  ->  throws TaskNotFoundException("Task with ID 999 not found")
+       |
+       v
+  Spring intercepts — bypasses normal response flow
+       |
+       v
   GlobalExceptionHandler.handleTaskNotFound() is called
-       ↓
-  Returns HTTP 404 with body:
+       |
+       v
+  HTTP 404 response:
   {
     "status": 404,
     "error": "Not Found",
@@ -571,76 +640,100 @@ spring:
     name: TaskManagerApplication
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/taskdb   # PostgreSQL running in Docker
+    url: jdbc:postgresql://localhost:5432/taskdb
     username: docker
     password: docker
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update      # Auto-creates/updates tables on startup (don't use in prod!)
+      ddl-auto: update      # Auto-creates/updates tables on startup — never use in production!
     show-sql: false          # Disabled — SQL goes to log file instead (see logging below)
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 server:
-  port: 9090                 # App runs on http://localhost:9090
+  port: 9090
 
 logging:
   file:
-    name: logs/app.log                          # Rolling log file
+    name: logs/app.log
   logback:
     rollingpolicy:
-      max-file-size: 10MB                       # Rotate when file hits 10MB
-      max-history: 7                            # Keep last 7 rotated files
+      max-file-size: 10MB
+      max-history: 7
       file-name-pattern: logs/app-%d{yyyy-MM-dd}.%i.log
   level:
-    root: INFO                                  # Default level
-    org.hibernate.SQL: DEBUG                    # Prints all SQL queries to log file
-    org.hibernate.orm.jdbc.bind: TRACE          # Prints actual values bound to ? placeholders
+    root: INFO
+    com.example.TaskManagerApplication: DEBUG     # Application code at DEBUG level
+    org.hibernate.SQL: DEBUG                      # SQL queries go to log file
+    org.hibernate.orm.jdbc.bind: TRACE            # Actual values bound to ? placeholders
 ```
 
-**`ddl-auto` options explained:**
+**`ddl-auto` options:**
 
 | Value | Behaviour |
 |---|---|
-| `create` | Drop and recreate schema on every startup (data loss!) |
+| `create` | Drop and recreate schema on every startup — data loss! |
 | `create-drop` | Like `create`, but also drops schema on shutdown |
-| `update` | Add missing tables/columns, but never drop anything |
+| `update` | Add missing columns/tables, never drop anything — safe for dev |
 | `validate` | Validate schema matches entities, throw error if mismatch |
-| `none` | Do nothing — manage schema yourself (production best practice) |
+| `none` | Do nothing — manage schema yourself — production best practice |
 
 ---
 
 ## 7. Build Configuration — `build.gradle.kts`
 
 ```kotlin
+plugins {
+    java
+    id("org.springframework.boot") version "4.0.3"
+    id("io.spring.dependency-management") version "1.1.7"
+}
+
+group = "com.example"
+version = "0.0.1-SNAPSHOT"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
 dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-web")        // REST API
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")   // JPA + Hibernate
-    runtimeOnly("org.postgresql:postgresql")                                   // PostgreSQL driver
+    implementation("org.springframework.boot:spring-boot-starter")              // Core Spring Boot auto-configuration
+    implementation("org.springframework.boot:spring-boot-starter-web")         // REST API (Tomcat + Jackson)
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")    // JPA + Hibernate
+    implementation("org.springframework.boot:spring-boot-starter-validation")  // @Valid, @NotBlank, @Size, @NotNull
+    runtimeOnly("org.postgresql:postgresql")                                    // PostgreSQL JDBC driver
 
-    compileOnly("org.projectlombok:lombok")                // Lombok available at compile time only
-    annotationProcessor("org.projectlombok:lombok")        // Runs Lombok's code generator
+    compileOnly("org.projectlombok:lombok")                                     // Lombok — compile time only
+    annotationProcessor("org.projectlombok:lombok")                             // Runs Lombok's code generator
 
-    implementation("org.mapstruct:mapstruct:1.6.0.Beta1")              // MapStruct runtime
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1") // MapStruct code generator
-    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0") // Ensures Lombok runs before MapStruct
+    implementation("org.mapstruct:mapstruct:1.6.0.Beta1")                       // MapStruct runtime
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1")        // MapStruct code generator
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")     // Ensures Lombok runs BEFORE MapStruct
 
-    testImplementation("org.springframework.boot:spring-boot-starter-test") // JUnit, Mockito, MockMvc
+    testImplementation("org.springframework.boot:spring-boot-starter-test")     // JUnit 5, Mockito, MockMvc
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")               // JUnit platform launcher
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
 ```
 
 **Dependency scope explained:**
 
-| Scope | Meaning |
-|---|---|
-| `implementation` | Available at compile time AND runtime — packaged into the final JAR |
-| `compileOnly` | Available at compile time ONLY — NOT in the final JAR (Lombok's job is done after compilation) |
-| `runtimeOnly` | NOT available at compile time — only at runtime (the DB driver only runs when the app runs) |
-| `annotationProcessor` | Run during compilation to generate source code (Lombok, MapStruct) |
-| `testImplementation` | Available for test code only — not in production JAR |
+| Scope | Available when | In JAR? | Use case |
+|---|---|---|---|
+| `implementation` | Compile + runtime | Yes | Regular dependencies (web, jpa, mapstruct) |
+| `compileOnly` | Compile only | No | Lombok — job is done after compilation |
+| `runtimeOnly` | Runtime only | Yes | PostgreSQL driver — only needed at runtime |
+| `annotationProcessor` | During compilation only | No | Code generators: Lombok, MapStruct |
+| `testImplementation` | Test compile + runtime | No | JUnit, Mockito |
+| `testRuntimeOnly` | Test runtime only | No | JUnit platform launcher |
 
 ---
 
@@ -650,40 +743,26 @@ dependencies {
 
 ```
 Client: GET /api/tasks/3
-  │
-  ▼
-[TaskController]
-  getTaskById(3)
-  │
-  ▼
-[TaskService]
-  taskRepository.findById(3)
-  │
-  ├─── Found ──────────────────────────────────────────────────────┐
-  │                                                                │
-  │  [TaskRepository]                                             │
-  │    SELECT * FROM tasks WHERE id = 3                           │
-  │    Returns: Task{id=3, header="Deploy", completed=false}      │
-  │                                                               │
-  │  [TaskMapper]                                                 │
-  │    task.header      → dto.title = "Deploy"                    │
-  │    task.completed   → dto.completionStatus = "PENDING"        │
-  │    Returns: TaskResponseDTO                                   │
-  │                                                               │
-  │  [TaskController]                                             │
-  │    Spring serializes DTO → JSON                               │
-  │                                                               │
-  └─► Client receives: HTTP 200                                   │
-      { "id": 3, "title": "Deploy", "completed": false,          │
-        "completionStatus": "PENDING" }                           │
-  │
-  └─── Not Found ──────────────────────────────────────────────────┐
-       [TaskService] throws TaskNotFoundException(3)               │
-       [GlobalExceptionHandler] catches it                         │
-       Client receives: HTTP 404                                   │
-       { "status": 404, "error": "Not Found",                     │
-         "message": "Task with ID 3 not found",                   │
-         "timestamp": "2026-02-24T10:30:00" }                     │
+  |
+  v
+[TaskController] getTaskById(3)
+  |
+  v
+[TaskService] taskRepository.findById(3)
+  |
+  +-- Found -----------------------------------------------------------------+
+  |   [TaskRepository] SELECT * FROM tasks WHERE id = 3                     |
+  |   Returns: Task { id=3, header="Deploy to Prod", completed=false }      |
+  |   [TaskMapper.toDTO()]                                                   |
+  |     header    -> title = "Deploy to Prod"                               |
+  |     completed -> completionStatus = "PENDING"                           |
+  |   [Jackson serializes TaskResponseDTO to JSON]                          |
+  +-> HTTP 200: { "id":3, "title":"Deploy to Prod", "completionStatus":"PENDING" ... }
+  |
+  +-- Not Found -------------------------------------------------------------+
+      throws TaskNotFoundException(3)
+      GlobalExceptionHandler.handleTaskNotFound() catches it
+      HTTP 404: { "status":404, "error":"Not Found", "message":"Task with ID 3 not found" }
 ```
 
 ### POST /api/tasks — Create a new task
@@ -691,40 +770,61 @@ Client: GET /api/tasks/3
 ```
 Client: POST /api/tasks
         Body: { "title": "Learn Spring Boot", "description": "Basics", "completed": false }
-  │
-  ▼
-[Spring Boot]
-  Deserializes JSON body → TaskResponseDTO object
-  │
-  ▼
-[TaskController]
-  createTask(dto)
-  │
-  ▼
+  |
+  v
+[Jackson] Deserializes JSON -> TaskRequestDTO object
+  |
+  v
+[TaskController] @Valid triggers Bean Validation on TaskRequestDTO
+  If invalid -> MethodArgumentNotValidException -> GlobalExceptionHandler -> HTTP 400
+  If valid   -> taskService.createTask(requestDto)
+  |
+  v
 [TaskService]
-  taskMapper.toEntity(dto)
-    → Task{id=null, header="Learn Spring Boot", description="Basics", completed=false}
-  │
-  ▼
-[TaskRepository]
+  taskMapper.toEntity(requestDto)
+    -> Task { id=null, header="Learn Spring Boot", description="Basics", completed=false }
   taskRepository.save(task)
-    → INSERT INTO tasks (title, description, completed) VALUES (?, ?, ?)
-    → Database assigns id = 4
-    → Returns: Task{id=4, header="Learn Spring Boot", ...}
-  │
-  ▼
-[TaskService]
+    -> INSERT INTO tasks (title, description, completed) VALUES (?, ?, ?)
+    -> DB auto-assigns id = 4
+    -> Returns: Task { id=4, header="Learn Spring Boot", ... }
   taskMapper.toDTO(savedTask)
-    → TaskResponseDTO{id=4, title="Learn Spring Boot", completionStatus="PENDING", ...}
-  │
-  ▼
-[Spring Boot]
-  Serializes DTO → JSON
-  │
-  ▼
-Client receives: HTTP 200
-  { "id": 4, "title": "Learn Spring Boot", "description": "Basics",
-    "completed": false, "completionStatus": "PENDING" }
+    -> TaskResponseDTO { id=4, title="Learn Spring Boot", completionStatus="PENDING", ... }
+  |
+  v
+HTTP 200: { "id":4, "title":"Learn Spring Boot", "completed":false, "completionStatus":"PENDING" }
+```
+
+### PUT /api/tasks/{id} — Update an existing task
+
+```
+Client: PUT /api/tasks/4
+        Body: { "title": "Learn Spring Boot", "description": "Advanced", "completed": true }
+  |
+  v
+[TaskController] @Valid -> [TaskService]
+  1. taskRepository.findById(4)       -> load existing Task (or throw 404)
+  2. existingTask.setHeader(...)      -> apply new values from RequestDTO
+  3. existingTask.setDescription(...) 
+  4. existingTask.setCompleted(...)
+  5. taskRepository.save(existing)    -> UPDATE tasks SET ... WHERE id = 4
+  6. taskMapper.toDTO(updated)        -> TaskResponseDTO
+  |
+  v
+HTTP 200: updated task as JSON
+```
+
+### DELETE /api/tasks/{id}
+
+```
+Client: DELETE /api/tasks/4
+  |
+  v
+[TaskController] -> [TaskService]
+  1. taskRepository.findById(4)   -> load Task (or throw 404)
+  2. taskRepository.delete(task)  -> DELETE FROM tasks WHERE id = 4
+  |
+  v
+HTTP 204 No Content (empty body — success)
 ```
 
 ---
@@ -733,15 +833,15 @@ Client receives: HTTP 200
 
 ### Base URL: `http://localhost:9090/api/tasks`
 
-| Method | Endpoint | Request Body | Success Response | Error Response |
+| Method | Endpoint | Request Body | Success | Error |
 |---|---|---|---|---|
-| GET | `/api/tasks` | None | 200 + Array of tasks | — |
-| GET | `/api/tasks/{id}` | None | 200 + Single task | 404 if not found |
-| POST | `/api/tasks` | Task JSON | 200 + Created task (with id) | 500 on error |
-| PUT | `/api/tasks/{id}` | Task JSON | 200 + Updated task | 404 if not found |
+| GET | `/api/tasks` | None | 200 + JSON array | — |
+| GET | `/api/tasks/{id}` | None | 200 + single task | 404 if not found |
+| POST | `/api/tasks` | TaskRequestDTO | 200 + created task (with id) | 400 if validation fails |
+| PUT | `/api/tasks/{id}` | TaskRequestDTO | 200 + updated task | 404 / 400 |
 | DELETE | `/api/tasks/{id}` | None | 204 No Content | 404 if not found |
 
-### Request Body Shape (for POST and PUT)
+### Request Body (POST and PUT)
 
 ```json
 {
@@ -751,7 +851,13 @@ Client receives: HTTP 200
 }
 ```
 
-### Response Shape (all GET and POST responses)
+Rules:
+- `title` — required, 3–100 characters
+- `description` — optional, max 500 characters
+- `completed` — required, must be `true` or `false`
+- Do **NOT** send `id` or `completionStatus` — these are server-managed
+
+### Response Body (GET / POST / PUT)
 
 ```json
 {
@@ -763,7 +869,7 @@ Client receives: HTTP 200
 }
 ```
 
-### Error Response Shape (all errors)
+### Error Response (400 / 404 / 500)
 
 ```json
 {
@@ -777,23 +883,23 @@ Client receives: HTTP 200
 ### curl Examples
 
 ```bash
-# 1. Get all tasks
+# Get all tasks
 curl http://localhost:9090/api/tasks
 
-# 2. Get task by ID
+# Get task by ID
 curl http://localhost:9090/api/tasks/1
 
-# 3. Create a new task
+# Create a new task
 curl -X POST http://localhost:9090/api/tasks \
   -H "Content-Type: application/json" \
   -d '{"title":"Learn Spring Boot","description":"Mastering the basics","completed":false}'
 
-# 4. Update a task
+# Update a task
 curl -X PUT http://localhost:9090/api/tasks/1 \
   -H "Content-Type: application/json" \
   -d '{"title":"Learn Spring Boot","description":"Advanced topics","completed":true}'
 
-# 5. Delete a task
+# Delete a task
 curl -X DELETE http://localhost:9090/api/tasks/1
 ```
 
@@ -811,48 +917,53 @@ public class TaskController {
     private TaskService taskService = new TaskService(new TaskRepository(...));
 }
 
-// GOOD — Spring injects it, easy to mock in tests
+// GOOD — Spring injects the dependency; easy to swap in a mock during tests
+@RequiredArgsConstructor
 public class TaskController {
-    private final TaskService taskService;  // Spring provides this
-
-    // @RequiredArgsConstructor generates this constructor:
-    public TaskController(TaskService taskService) {
-        this.taskService = taskService;
-    }
+    private final TaskService taskService;  // Spring provides this at startup
 }
 ```
 
-### Optional\<T\> — Safely handling "might not exist"
+### Optional\<T\> — Handling "might not exist"
 
 ```java
-// findById() returns Optional<Task> — it either has a value or is empty
-Optional<Task> result = taskRepository.findById(id);
+// findById() returns Optional<Task> — it may or may not contain a value
 
-// BAD — crashes with NoSuchElementException if empty
-Task task = result.get();
+// BAD — throws a generic NoSuchElementException with no useful message
+Task task = taskRepository.findById(id).get();
 
-// GOOD — throws your custom exception, handled by GlobalExceptionHandler → 404
-Task task = result.orElseThrow(() -> new TaskNotFoundException(id));
+// GOOD — throws your custom exception, caught by GlobalExceptionHandler -> clean 404
+Task task = taskRepository.findById(id)
+        .orElseThrow(() -> new TaskNotFoundException(id));
 ```
 
 ### @Transactional
 
 ```java
 @Transactional
-public TaskResponseDTO createTask(TaskResponseDTO dto) {
+public TaskResponseDTO createTask(TaskRequestDTO dto) {
     Task entity = taskMapper.toEntity(dto);
-    // If taskRepository.save() throws an exception here,
-    // everything is rolled back — no partial data in DB
-    Task saved = taskRepository.save(entity);
+    Task saved  = taskRepository.save(entity);  // If this throws, everything is rolled back
     return taskMapper.toDTO(saved);
 }
 ```
 
-### Lombok Annotations Quick Reference
+### boolean (primitive) vs Boolean (wrapper) — and Lombok
+
+| Field declaration | Lombok generates |
+|---|---|
+| `private boolean completed;` | `isCompleted()` |
+| `private Boolean completed;` | `getCompleted()` |
+
+In both `Task.java` and `TaskRequestDTO.java`, `completed` is declared as `boolean` (primitive),
+so Lombok generates `isCompleted()`. This is why `TaskService.updateTask()` calls
+`requestDto.isCompleted()` — **not** `requestDto.getCompleted()`.
+
+### Lombok Quick Reference
 
 | Annotation | Generated code |
 |---|---|
-| `@Getter` | `getField()` for every field |
+| `@Getter` | `getField()` for every field; `isField()` for booleans |
 | `@Setter` | `setField(value)` for every field |
 | `@NoArgsConstructor` | `public Task() {}` |
 | `@AllArgsConstructor` | `public Task(Long id, String header, ...)` |
@@ -863,73 +974,74 @@ public TaskResponseDTO createTask(TaskResponseDTO dto) {
 
 | Annotation | Meaning |
 |---|---|
-| `@SpringBootApplication` | Entry point — enables everything |
+| `@SpringBootApplication` | Entry point — enables auto-config and component scan |
 | `@RestController` | HTTP controller that returns JSON |
 | `@RequestMapping` | Base URL path for the class |
 | `@GetMapping` | Handle HTTP GET |
 | `@PostMapping` | Handle HTTP POST |
 | `@PutMapping` | Handle HTTP PUT |
 | `@DeleteMapping` | Handle HTTP DELETE |
-| `@PathVariable` | Extract `{id}` from URL |
-| `@RequestBody` | Parse JSON body into Java object |
+| `@PathVariable` | Extract `{id}` from the URL |
+| `@RequestBody` | Parse JSON body into a Java object |
+| `@Valid` | Trigger Bean Validation on the annotated parameter |
 | `@Service` | Business logic bean |
 | `@Repository` | Data access bean |
 | `@Entity` | JPA-managed database table |
-| `@RestControllerAdvice` | Global exception interceptor |
+| `@Transactional` | Wrap in a DB transaction — auto-rollback on failure |
+| `@RestControllerAdvice` | Global exception interceptor for all controllers |
 | `@ExceptionHandler` | Method handles a specific exception type |
-| `@Transactional` | Wrap method in a DB transaction |
 
 ---
 
 ## 11. How Everything Connects
 
 ```
-                        TaskManagerApplication.java
-                                   │
-                     @SpringBootApplication scans everything
-                                   │
-           ┌───────────────────────┼───────────────────────┐
-           │                       │                       │
-           ▼                       ▼                       ▼
-  TaskController.java      GlobalException           application.yaml
-  (@RestController)         Handler.java             (config & DB)
-           │                (@RestControllerAdvice)
-           │ calls                 │ intercepts
-           ▼                 exceptions from
-  TaskService.java           TaskController
-  (@Service)
-           │ uses
-     ┌─────┴─────┐
-     ▼           ▼
+                       TaskManagerApplication.java
+                                  |
+                    @SpringBootApplication scans everything
+                                  |
+         +------------------------+------------------------+
+         |                        |                        |
+         v                        v                        v
+ TaskController.java    GlobalExceptionHandler.java   application.yaml
+ (@RestController)      (@RestControllerAdvice)       (port, DB, logging)
+         |                        |
+         | calls                  | intercepts exceptions
+         v                        | thrown by any controller
+ TaskService.java
+ (@Service)
+         |
+   +-----+------+
+   |             |
+   v             v
 TaskRepository  TaskMapper
-(@Repository)  (@Mapper)
-     │           │
-     │ SQL     converts
-     ▼           ▼
-PostgreSQL    Task  ↔  TaskResponseDTO
- Database
+(@Repository)   (@Mapper — MapStruct)
+   |             |
+   | SQL         | converts between
+   v             v
+PostgreSQL     Task (Entity) <-> TaskRequestDTO / TaskResponseDTO
 (tasks table)
 ```
 
-**Data types that flow between layers:**
+**Data types flowing between layers:**
 
 ```
-HTTP JSON  →  [Controller]  →  TaskResponseDTO
-TaskResponseDTO  →  [Service/Mapper]  →  Task (Entity)
-Task (Entity)  →  [Repository]  →  SQL / PostgreSQL
-PostgreSQL  →  [Repository]  →  Task (Entity)
-Task (Entity)  →  [Service/Mapper]  →  TaskResponseDTO
-TaskResponseDTO  →  [Controller]  →  HTTP JSON
+HTTP JSON (request)  ->  TaskRequestDTO   [Controller — @Valid enforced here]
+TaskRequestDTO       ->  Task (Entity)    [Service — via TaskMapper.toEntity()]
+Task (Entity)        ->  PostgreSQL       [Repository — SQL via Hibernate]
+PostgreSQL           ->  Task (Entity)    [Repository — Hibernate maps result set]
+Task (Entity)        ->  TaskResponseDTO  [Service — via TaskMapper.toDTO()]
+TaskResponseDTO      ->  HTTP JSON        [Controller — Jackson serializes]
 ```
 
-### The Three Rules of this Architecture
+**The Three Rules of this Architecture:**
 
-1. **Controllers** accept and return DTOs — they never touch Entities or the database
-2. **Services** contain all logic — they convert between DTOs and Entities using the Mapper
+1. **Controllers** accept and return DTOs — they never touch Entities or the database directly
+2. **Services** contain all business logic — they convert between DTOs and Entities via the Mapper
 3. **Repositories** only deal with Entities — they know nothing about DTOs or HTTP
 
 Following these rules makes every layer independently:
-- **Testable** — mock the layer below, test the layer in isolation
+- **Testable** — mock the layer below, test each layer in isolation
 - **Changeable** — swap PostgreSQL for MongoDB without touching the Controller
-- **Understandable** — each file has one clear job
+- **Understandable** — every file has one clear, single responsibility
 

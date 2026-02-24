@@ -1,5 +1,6 @@
 package com.taskmanager.app.service;
 
+import com.taskmanager.app.dto.TaskRequestDTO;
 import com.taskmanager.app.dto.TaskResponseDTO;
 import com.taskmanager.app.exception.TaskNotFoundException;
 import com.taskmanager.app.mapper.TaskMapper;
@@ -33,36 +34,30 @@ public class TaskService {
         return taskMapper.toDTO(task);
     }
 
-    // CREATE
+    // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
     @Transactional  // If anything fails, the whole operation is rolled back
-    public TaskResponseDTO createTask(TaskResponseDTO dto) {
-        // Convert DTO (with 'title') to Entity (with 'header')
-        Task taskEntity = taskMapper.toEntity(dto); // DTO → Entity
-
-        // Save to DB
-        Task savedTask = taskRepository.save(taskEntity); // INSERT into DB
-
-        // Convert back to DTO for the response
-        return taskMapper.toDTO(savedTask);          // Entity → DTO (with generated id)
+    public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
+        Task taskEntity = taskMapper.toEntity(requestDto); // RequestDTO → Entity (id is null, DB assigns it)
+        Task savedTask  = taskRepository.save(taskEntity); // INSERT into DB
+        return taskMapper.toDTO(savedTask);                // Entity → ResponseDTO (with DB-generated id)
     }
 
-    // UPDATE
+    // UPDATE — accepts TaskRequestDTO (client cannot change the id via request body)
     @Transactional
-    public TaskResponseDTO updateTask(Long id, TaskResponseDTO taskDetailsDto) {
-        // 1. Find the existing record (or throw your custom 404 exception)
+    public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
+        // 1. Find the existing record (or throw 404)
         Task existingTask = taskRepository.findById(id)
-                .orElseThrow(() -> new TaskNotFoundException(id));  // 404 if not found
+                .orElseThrow(() -> new TaskNotFoundException(id));
 
-        // 2. Use the Mapper to update the existing entity with new DTO values
-        // This is better than writing 10 setters manually!
-        existingTask.setHeader(taskDetailsDto.getTitle());
-        existingTask.setDescription(taskDetailsDto.getDescription());
-        existingTask.setCompleted(taskDetailsDto.isCompleted());
+        // 2. Apply the new values from the request onto the existing entity
+        existingTask.setHeader(requestDto.getTitle());
+        existingTask.setDescription(requestDto.getDescription());
+        existingTask.setCompleted(requestDto.isCompleted());
 
-        // 3. Save the updated entity back to Postgres
+        // 3. Save updated entity back to DB
         Task updatedTask = taskRepository.save(existingTask);
 
-        // 4. Return the result as a DTO
+        // 4. Return as ResponseDTO
         return taskMapper.toDTO(updatedTask);
     }
 
