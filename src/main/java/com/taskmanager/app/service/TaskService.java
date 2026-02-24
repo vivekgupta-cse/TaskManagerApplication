@@ -17,8 +17,9 @@ import java.util.List;
 @RequiredArgsConstructor   // Lombok: generates constructor for all 'final' fields
 public class TaskService {
 
-    private final TaskRepository taskRepository; // injected by Spring
-    private final TaskMapper taskMapper;         // injected by Spring
+    private final TaskRepository taskRepository;           // injected by Spring
+    private final TaskMapper taskMapper;                   // injected by Spring
+    private final SanitizationService sanitizationService; // injected by Spring
 
     // READ ALL
     public List<TaskResponseDTO> getAllTasks() {
@@ -38,7 +39,10 @@ public class TaskService {
     // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
     @Transactional  // If anything fails, the whole operation is rolled back
     public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
-        // Business Validation
+        // Step 1: Strip any HTML/JS from user input before doing anything else
+        sanitizeRequest(requestDto);
+
+        // Step 2: Business Validation (after sanitization, so we check the clean value)
         if (taskRepository.existsByHeaderAndCompletedFalse(requestDto.getTitle())) {
             throw new DuplicateTaskException("You already have an active task with this title!");
         }
@@ -50,20 +54,44 @@ public class TaskService {
     // UPDATE — accepts TaskRequestDTO (client cannot change the id via request body)
     @Transactional
     public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
-        // 1. Find the existing record (or throw 404)
+        // Step 1: Strip any HTML/JS from user input before doing anything else
+        sanitizeRequest(requestDto);
+
+        // Step 2: Find the existing record (or throw 404)
         Task existingTask = taskRepository.findById(id)
                 .orElseThrow(() -> new TaskNotFoundException(id));
 
-        // 2. Apply the new values from the request onto the existing entity
+        // Step 3: Apply the sanitized values from the request onto the existing entity
         existingTask.setHeader(requestDto.getTitle());
         existingTask.setDescription(requestDto.getDescription());
-        existingTask.setCompleted(requestDto.isCompleted());
+        existingTask.setCompleted(requestDto.getCompleted());
 
-        // 3. Save updated entity back to DB
+        // Step 4: Save updated entity back to DB
         Task updatedTask = taskRepository.save(existingTask);
 
-        // 4. Return as ResponseDTO
+        // Step 5: Return as ResponseDTO
         return taskMapper.toDTO(updatedTask);
+    }
+
+    // -------------------------------------------------------------------------
+    // PRIVATE HELPERS
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sanitizes all user-supplied string fields in the request DTO.
+     *
+     * Why here and not in the DTO itself?
+     *   - DTOs are plain data holders; business logic belongs in the service layer.
+     *   - Keeping sanitization here means the DTO stays clean and testable.
+     *   - A single place to change if we ever switch sanitization libraries.
+     *
+     * What does it do?
+     *   "<script>alert('x')</script>Buy groceries"  →  "Buy groceries"
+     *   "Buy groceries"                              →  "Buy groceries"  (unchanged)
+     */
+    private void sanitizeRequest(TaskRequestDTO requestDto) {
+        requestDto.setTitle(sanitizationService.sanitize(requestDto.getTitle()));
+        requestDto.setDescription(sanitizationService.sanitize(requestDto.getDescription()));
     }
 
     // DELETE
