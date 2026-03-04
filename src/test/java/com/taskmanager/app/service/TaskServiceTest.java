@@ -59,7 +59,14 @@ class TaskServiceTest {
 
     @BeforeEach
     void setUp() {
-        sampleTask = new Task(1L, "Buy Groceries", "Milk and eggs", false, false);
+        sampleTask = Task.builder()
+                .id(1L)
+                .header("Buy Groceries") // Note: using 'header' as per entity field name
+                .description("Milk and eggs")
+                .completed(false)
+                .deleted(false)
+                // Audit fields are omitted; they will be null or can be set if needed
+                .build();
 
         sampleResponseDTO = new TaskResponseDTO();
         sampleResponseDTO.setId(1L);
@@ -87,7 +94,13 @@ class TaskServiceTest {
         void returnsAllTasksAsDTOs() {
             // 1. Arrange
             Pageable pageable = PageRequest.of(0, 10);
-            Task task2 = new Task(2L, "Read Book", "Java 25", true, false);
+            Task task2 = Task.builder()
+                    .id(2L)
+                    .header("Read Book")    // Maps to the entity field name
+                    .description("Java 25")
+                    .completed(true)
+                    .deleted(false)
+                    .build();
 
             TaskResponseDTO dto2 = new TaskResponseDTO();
             dto2.setId(2L);
@@ -268,7 +281,13 @@ class TaskServiceTest {
                     .completed(true)
                     .build();
 
-            Task updatedTask = new Task(1L, "Buy Groceries Updated", "Milk, eggs, and bread", true, false);
+            Task updatedTask = Task.builder()
+                    .id(1L)
+                    .header("Buy Groceries Updated") // Use 'header' to match the Entity field
+                    .description("Milk, eggs, and bread")
+                    .completed(true)
+                    .deleted(false)
+                    .build();
             TaskResponseDTO updatedDTO = new TaskResponseDTO();
             updatedDTO.setId(1L);
             updatedDTO.setTitle("Buy Groceries Updated");

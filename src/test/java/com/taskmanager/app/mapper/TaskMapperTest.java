@@ -36,7 +36,13 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps all fields correctly for an incomplete task")
         void mapsAllFieldsForIncompleteTask() {
-            Task task = new Task(1L, "Buy Groceries", "Milk and eggs", false, false);
+            Task task = Task.builder()
+                    .id(1L)
+                    .header("Buy Groceries")
+                    .description("Milk and eggs")
+                    .completed(false)
+                    .deleted(false)
+                    .build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -50,7 +56,13 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps completionStatus to DONE for a completed task")
         void mapsCompletionStatusToDoneForCompletedTask() {
-            Task task = new Task(2L, "Read Book", "Java Guide", true, false);
+            Task task = Task.builder()
+                    .id(2L)
+                    .header("Read Book")
+                    .description("Java Guide")
+                    .completed(true)
+                    .deleted(false)
+                    .build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -62,7 +74,12 @@ class TaskMapperTest {
         @DisplayName("maps header (entity field) to title (DTO field)")
         void mapsHeaderToTitle() {
             // The entity field is 'header', but the DTO field is 'title'
-            Task task = new Task(3L, "the-header-value", null, false, false);
+            Task task = Task.builder()
+                    .id(3L)
+                    .header("the-header-value")
+                    .completed(false)
+                    .deleted(false)
+                    .build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -72,7 +89,13 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps null description correctly")
         void mapsNullDescriptionCorrectly() {
-            Task task = new Task(4L, "No Description Task", null, false, false);
+            Task task = Task.builder()
+                    .id(4L)
+                    .header("No Description Task")
+                    .description(null)
+                    .completed(false)
+                    .deleted(false)
+                    .build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
