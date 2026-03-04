@@ -13,7 +13,7 @@ import static org.mockito.Mockito.mock;
 
 /**
  * Unit tests for SanitizationService.
- *
+ * <p>
  * SanitizationService has no Spring dependencies, so we instantiate it directly.
  * No mocking needed — we test the real AntiSamy sanitization logic.
  */

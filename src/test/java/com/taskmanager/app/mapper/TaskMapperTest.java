@@ -13,11 +13,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration test for TaskMapper (MapStruct-generated code).
- *
+ * <p>
  * We use @SpringBootTest to let Spring load the MapStruct-generated
  * TaskMapperImpl bean. The mapping logic is generated at compile-time,
  * so we just verify the field mappings are correct.
- *
+ * <p>
  * Note: Uses the test application.yaml (H2 in-memory DB) from src/test/resources.
  */
 @SpringBootTest
@@ -36,7 +36,7 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps all fields correctly for an incomplete task")
         void mapsAllFieldsForIncompleteTask() {
-            Task task = new Task(1L, "Buy Groceries", "Milk and eggs", false);
+            Task task = new Task(1L, "Buy Groceries", "Milk and eggs", false, false);
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -50,7 +50,7 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps completionStatus to DONE for a completed task")
         void mapsCompletionStatusToDoneForCompletedTask() {
-            Task task = new Task(2L, "Read Book", "Java Guide", true);
+            Task task = new Task(2L, "Read Book", "Java Guide", true, false);
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -62,7 +62,7 @@ class TaskMapperTest {
         @DisplayName("maps header (entity field) to title (DTO field)")
         void mapsHeaderToTitle() {
             // The entity field is 'header', but the DTO field is 'title'
-            Task task = new Task(3L, "the-header-value", null, false);
+            Task task = new Task(3L, "the-header-value", null, false, false);
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -72,7 +72,7 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps null description correctly")
         void mapsNullDescriptionCorrectly() {
-            Task task = new Task(4L, "No Description Task", null, false);
+            Task task = new Task(4L, "No Description Task", null, false, false);
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 

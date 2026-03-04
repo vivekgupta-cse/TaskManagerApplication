@@ -11,25 +11,25 @@ import java.io.InputStream;
 
 /**
  * SanitizationService — strips dangerous HTML/JavaScript from user-supplied text.
- *
+ * <p>
  * Why is this needed?
  * -------------------
  * When a user sends text like:
- *   "title": "<script>alert('Hacked!')</script>"
- *
+ * "title": "<script>alert('Hacked!')</script>"
+ * <p>
  * Without sanitization, that malicious script gets stored in the database.
  * If any frontend ever renders it, the script runs in the browser — this is
  * called XSS (Cross-Site Scripting).
- *
+ * <p>
  * AntiSamy (by OWASP) parses the input against a known-safe policy and removes
  * anything dangerous, while keeping harmless plain text intact.
- *
+ * <p>
  * Example:
- *   Input:  "<script>alert('x')</script>Buy groceries"
- *   Output: "Buy groceries"
- *
- *   Input:  "Buy groceries"         <- clean input
- *   Output: "Buy groceries"         <- unchanged
+ * Input:  "<script>alert('x')</script>Buy groceries"
+ * Output: "Buy groceries"
+ * <p>
+ * Input:  "Buy groceries"         <- clean input
+ * Output: "Buy groceries"         <- unchanged
  */
 @Service
 public class SanitizationService {
@@ -71,10 +71,10 @@ public class SanitizationService {
 
     /**
      * Sanitizes a single string value.
-     *
+     * <p>
      * - If the value is null or blank, it is returned as-is (validation handles that).
      * - If sanitization is unavailable (policy failed to load), the original value
-     *   is returned with a warning log.
+     * is returned with a warning log.
      * - Dangerous HTML/JS is stripped; safe plain text is returned unchanged.
      *
      * @param input the raw user-provided string
@@ -96,8 +96,8 @@ public class SanitizationService {
             // Log if anything was stripped, so you can monitor abuse attempts
             if (results.getNumberOfErrors() > 0) {
                 log.warn("Sanitization removed potentially dangerous content. " +
-                         "Original: '{}', Cleaned: '{}', Issues: {}",
-                         input, results.getCleanHTML(), results.getErrorMessages());
+                                "Original: '{}', Cleaned: '{}', Issues: {}",
+                        input, results.getCleanHTML(), results.getErrorMessages());
             }
 
             return results.getCleanHTML();

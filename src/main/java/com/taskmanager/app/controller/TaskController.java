@@ -5,10 +5,11 @@ import com.taskmanager.app.dto.TaskResponseDTO;
 import com.taskmanager.app.service.TaskService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController               // = @Controller + @ResponseBody: auto-converts return values to JSON
 @RequestMapping("/api/tasks") // All endpoints in this class are prefixed with /api/tasks
@@ -19,8 +20,10 @@ public class TaskController {
 
     // GET /api/tasks → returns all tasks as a JSON array
     @GetMapping
-    public List<TaskResponseDTO> getAllTasks() {
-        return taskService.getAllTasks();
+    public ResponseEntity<Page<TaskResponseDTO>> getAllTasks(
+            @PageableDefault(size = 10, sort = "header") Pageable pageable) {
+        // @PageableDefault provides sensible defaults if the user sends no params
+        return ResponseEntity.ok(taskService.getAllTasks(pageable));
     }
 
     // GET /api/tasks/{id} → returns a single task, or 404 if not found

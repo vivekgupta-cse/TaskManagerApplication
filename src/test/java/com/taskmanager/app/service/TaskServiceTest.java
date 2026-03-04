@@ -15,17 +15,22 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for TaskService.
- *
+ * <p>
  * Strategy: Pure unit test — all collaborators (repository, mapper, sanitization)
  * are mocked with Mockito. No Spring context is loaded, so tests run in milliseconds.
  */
@@ -54,7 +59,7 @@ class TaskServiceTest {
 
     @BeforeEach
     void setUp() {
-        sampleTask = new Task(1L, "Buy Groceries", "Milk and eggs", false);
+        sampleTask = new Task(1L, "Buy Groceries", "Milk and eggs", false, false);
 
         sampleResponseDTO = new TaskResponseDTO();
         sampleResponseDTO.setId(1L);
@@ -80,32 +85,49 @@ class TaskServiceTest {
         @Test
         @DisplayName("returns all tasks as ResponseDTOs")
         void returnsAllTasksAsDTOs() {
-            Task task2 = new Task(2L, "Read Book", "Java 25", true);
+            // 1. Arrange
+            Pageable pageable = PageRequest.of(0, 10);
+            Task task2 = new Task(2L, "Read Book", "Java 25", true, false);
+
             TaskResponseDTO dto2 = new TaskResponseDTO();
             dto2.setId(2L);
             dto2.setTitle("Read Book");
             dto2.setCompleted(true);
             dto2.setCompletionStatus("DONE");
 
-            when(taskRepository.findAll()).thenReturn(List.of(sampleTask, task2));
+            // Wrap the entities in a Page object
+            Page<Task> taskPage = new PageImpl<>(List.of(sampleTask, task2), pageable, 2);
+
+            // Mock must now use Pageable
+            when(taskRepository.findAll(any(Pageable.class))).thenReturn(taskPage);
             when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
             when(taskMapper.toDTO(task2)).thenReturn(dto2);
 
-            List<TaskResponseDTO> result = taskService.getAllTasks();
+            // 2. Act
+            Page<TaskResponseDTO> result = taskService.getAllTasks(pageable);
 
-            assertThat(result).hasSize(2);
-            assertThat(result.get(0).getTitle()).isEqualTo("Buy Groceries");
-            assertThat(result.get(1).getTitle()).isEqualTo("Read Book");
+            // 3. Assert
+            assertThat(result.getContent()).hasSize(2); // Use .getContent() to access the list
+            assertThat(result.getContent().get(0).getTitle()).isEqualTo("Buy Groceries");
+            assertThat(result.getContent().get(1).getTitle()).isEqualTo("Read Book");
+            assertThat(result.getTotalElements()).isEqualTo(2);
         }
 
         @Test
         @DisplayName("returns empty list when no tasks exist")
         void returnsEmptyListWhenNoTasks() {
-            when(taskRepository.findAll()).thenReturn(List.of());
+            // 1. Arrange
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Task> emptyPage = new PageImpl<>(List.of(), pageable, 0);
 
-            List<TaskResponseDTO> result = taskService.getAllTasks();
+            when(taskRepository.findAll(any(Pageable.class))).thenReturn(emptyPage);
 
-            assertThat(result).isEmpty();
+            // 2. Act
+            Page<TaskResponseDTO> result = taskService.getAllTasks(pageable);
+
+            // 3. Assert
+            assertThat(result.getContent()).isEmpty();
+            assertThat(result.getTotalElements()).isZero();
         }
     }
 
@@ -246,7 +268,7 @@ class TaskServiceTest {
                     .completed(true)
                     .build();
 
-            Task updatedTask = new Task(1L, "Buy Groceries Updated", "Milk, eggs, and bread", true);
+            Task updatedTask = new Task(1L, "Buy Groceries Updated", "Milk, eggs, and bread", true, false);
             TaskResponseDTO updatedDTO = new TaskResponseDTO();
             updatedDTO.setId(1L);
             updatedDTO.setTitle("Buy Groceries Updated");

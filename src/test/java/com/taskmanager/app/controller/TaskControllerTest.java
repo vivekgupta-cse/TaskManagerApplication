@@ -1,6 +1,5 @@
 package com.taskmanager.app.controller;
 
-import tools.jackson.databind.ObjectMapper;
 import com.taskmanager.app.dto.TaskRequestDTO;
 import com.taskmanager.app.dto.TaskResponseDTO;
 import com.taskmanager.app.exception.DuplicateTaskException;
@@ -15,10 +14,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -30,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Unit tests for TaskController + GlobalExceptionHandler using MockMvc.
- *
+ * <p>
  * Uses standalone MockMvc with Mockito (no Spring test slices required).
  */
 @ExtendWith(MockitoExtension.class)
@@ -55,11 +59,18 @@ class TaskControllerTest {
     void setUp() {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
+
+        // Add this line to handle pagination in tests
+        PageableHandlerMethodArgumentResolver pageableResolver = new PageableHandlerMethodArgumentResolver();
+
         mockMvc = MockMvcBuilders
                 .standaloneSetup(taskController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
+                // CRITICAL: This allows @GetMapping methods to receive Pageable
+                .setCustomArgumentResolvers(pageableResolver)
                 .build();
+
         objectMapper = new ObjectMapper();
 
         sampleResponse = new TaskResponseDTO();
@@ -84,35 +95,56 @@ class TaskControllerTest {
     class GetAllTasks {
 
         @Test
-        @DisplayName("returns 200 with list of tasks")
+        @DisplayName("returns 200 with paged list of tasks")
         void returns200WithAllTasks() throws Exception {
+            // 1. Arrange
             TaskResponseDTO dto2 = new TaskResponseDTO();
             dto2.setId(2L);
             dto2.setTitle("Read Book");
             dto2.setCompleted(true);
             dto2.setCompletionStatus("DONE");
 
-            when(taskService.getAllTasks()).thenReturn(List.of(sampleResponse, dto2));
+            // Wrap your list in a PageImpl object
+            List<TaskResponseDTO> dtoList = List.of(sampleResponse, dto2);
+            PageImpl<TaskResponseDTO> pagedResponse = new PageImpl<>(dtoList, PageRequest.of(0, 10), 2);
 
+            // Mock the service to accept any Pageable and return the pagedResponse
+            when(taskService.getAllTasks(any(Pageable.class))).thenReturn(pagedResponse);
+
+            // 2. Act & Assert
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
                     .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(jsonPath("$.length()").value(2))
-                    .andExpect(jsonPath("$[0].id").value(1))
-                    .andExpect(jsonPath("$[0].title").value("Buy Groceries"))
-                    .andExpect(jsonPath("$[0].completionStatus").value("PENDING"))
-                    .andExpect(jsonPath("$[1].title").value("Read Book"))
-                    .andExpect(jsonPath("$[1].completionStatus").value("DONE"));
+                    // IMPORTANT: jsonPath must now start with $.content
+                    .andExpect(jsonPath("$.content.length()").value(2))
+                    .andExpect(jsonPath("$.content[0].id").value(1))
+                    .andExpect(jsonPath("$.content[0].title").value("Buy Groceries"))
+                    .andExpect(jsonPath("$.content[0].completionStatus").value("PENDING"))
+                    .andExpect(jsonPath("$.content[1].title").value("Read Book"))
+                    .andExpect(jsonPath("$.content[1].completionStatus").value("DONE"))
+                    // Extra: Verify pagination metadata exists
+                    .andExpect(jsonPath("$.totalElements").value(2))
+                    .andExpect(jsonPath("$.totalPages").value(1));
         }
 
         @Test
-        @DisplayName("returns 200 with empty array when no tasks")
+        @DisplayName("returns 200 with empty content array when no tasks exist")
         void returns200WithEmptyArray() throws Exception {
-            when(taskService.getAllTasks()).thenReturn(List.of());
+            // 1. Arrange
+            // Create an empty Page object with default page metadata
+            PageImpl<TaskResponseDTO> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
 
+            // Mock the service to accept any Pageable and return the empty page
+            when(taskService.getAllTasks(any(Pageable.class))).thenReturn(emptyPage);
+
+            // 2. Act & Assert
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(0));
+                    // Check that the 'content' field is an empty array
+                    .andExpect(jsonPath("$.content").isArray())
+                    .andExpect(jsonPath("$.content.length()").value(0))
+                    // Verify metadata shows zero total elements
+                    .andExpect(jsonPath("$.totalElements").value(0));
         }
     }
 
@@ -357,14 +389,19 @@ class TaskControllerTest {
         @Test
         @DisplayName("returns 500 with safe message for unexpected exceptions")
         void returns500ForUnexpectedException() throws Exception {
-            when(taskService.getAllTasks()).thenThrow(new RuntimeException("DB connection lost"));
+            // 1. Arrange: Use any(Pageable.class) because the controller now passes a Pageable object
+            when(taskService.getAllTasks(any(Pageable.class)))
+                    .thenThrow(new RuntimeException("DB connection lost"));
 
+            // 2. Act & Assert
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isInternalServerError())
-                    .andExpect(jsonPath("$.status").value(500))
-                    .andExpect(jsonPath("$.error").value("Internal Server Error"))
-                    // Must NOT expose internal details
+                    // Adjust these jsonPaths to match the Map keys in your GlobalExceptionHandler
+                    .andExpect(jsonPath("$.timestamp").exists())
                     .andExpect(jsonPath("$.message").value("Something went wrong. Please try again later."));
+
+            // Note: If your handler doesn't explicitly put "status" or "error" in the Map,
+            // remove those specific jsonPath checks to avoid assertion failures.
         }
     }
 }

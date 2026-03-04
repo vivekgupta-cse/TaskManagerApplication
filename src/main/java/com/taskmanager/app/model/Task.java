@@ -1,9 +1,12 @@
 package com.taskmanager.app.model;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.SQLDelete;
-import org.hibernate.annotations.SQLRestriction; // Replaces @Where in newer versions
+import org.hibernate.annotations.SQLRestriction;
 
 
 @Entity                     // Hibernate: manage this class as a database table and creates table
@@ -11,7 +14,8 @@ import org.hibernate.annotations.SQLRestriction; // Replaces @Where in newer ver
 //@Data                       // Lombok: generates getters, setters, toString, equals, hashCode
 @SQLDelete(sql = "UPDATE tasks SET deleted = true WHERE id=?") // Overrides DELETE command
 @SQLRestriction("deleted = false") // Automatically filters all SELECT queries
-@Getter @Setter // Better than @Data for JPA entities
+@Getter
+@Setter // Better than @Data for JPA entities
 @NoArgsConstructor          // Lombok: generates empty constructor (REQUIRED by JPA)
 @AllArgsConstructor         // Lombok: generates constructor with all fields
 public class Task {

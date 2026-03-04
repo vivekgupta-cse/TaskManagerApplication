@@ -19,6 +19,7 @@ public interface TaskMapper {
 
     // RequestDTO → Entity (for CREATE and UPDATE — client sends title, maps to header)
     @Mapping(source = "title", target = "header")  // title (client input) → header (Java field)
-    @Mapping(target = "id", ignore = true)          // id is always DB-generated, never from client
+    @Mapping(target = "id", ignore = true)
+    // id is always DB-generated, never from client
     Task toEntity(TaskRequestDTO dto);
 }

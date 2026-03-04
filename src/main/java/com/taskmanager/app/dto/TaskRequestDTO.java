@@ -3,11 +3,7 @@ package com.taskmanager.app.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 // TaskRequestDTO.java — what clients SEND (POST / PUT request body)
 // Does NOT have: id (DB generates it), completionStatus (server computes it)

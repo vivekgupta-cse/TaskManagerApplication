@@ -8,10 +8,10 @@ import com.taskmanager.app.mapper.TaskMapper;
 import com.taskmanager.app.model.Task;
 import com.taskmanager.app.repository.TaskRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service                   // Marks this as a Spring managed service bean
 @RequiredArgsConstructor   // Lombok: generates constructor for all 'final' fields
@@ -22,11 +22,11 @@ public class TaskService {
     private final SanitizationService sanitizationService; // injected by Spring
 
     // READ ALL
-    public List<TaskResponseDTO> getAllTasks() {
-        return taskRepository.findAll()   // SELECT * FROM tasks  → List<Task>
-                .stream()
-                .map(taskMapper::toDTO)   // Each Task → TaskResponseDTO
-                .toList();                // Collect into a new list (safe, defensive copy)
+    public Page<TaskResponseDTO> getAllTasks(Pageable pageable) {
+        // taskRepository.findAll(pageable) returns a Page<Task>
+        // We map each Task entity to a TaskResponseDTO
+        return taskRepository.findAll(pageable)
+                .map(taskMapper::toDTO);
     }
 
     // READ ONE
@@ -47,7 +47,7 @@ public class TaskService {
             throw new DuplicateTaskException("You already have an active task with this title!");
         }
         Task taskEntity = taskMapper.toEntity(requestDto); // RequestDTO → Entity (id is null, DB assigns it)
-        Task savedTask  = taskRepository.save(taskEntity); // INSERT into DB
+        Task savedTask = taskRepository.save(taskEntity); // INSERT into DB
         return taskMapper.toDTO(savedTask);                // Entity → ResponseDTO (with DB-generated id)
     }
 
@@ -79,15 +79,15 @@ public class TaskService {
 
     /**
      * Sanitizes all user-supplied string fields in the request DTO.
-     *
+     * <p>
      * Why here and not in the DTO itself?
-     *   - DTOs are plain data holders; business logic belongs in the service layer.
-     *   - Keeping sanitization here means the DTO stays clean and testable.
-     *   - A single place to change if we ever switch sanitization libraries.
-     *
+     * - DTOs are plain data holders; business logic belongs in the service layer.
+     * - Keeping sanitization here means the DTO stays clean and testable.
+     * - A single place to change if we ever switch sanitization libraries.
+     * <p>
      * What does it do?
-     *   "<script>alert('x')</script>Buy groceries"  →  "Buy groceries"
-     *   "Buy groceries"                              →  "Buy groceries"  (unchanged)
+     * "<script>alert('x')</script>Buy groceries"  →  "Buy groceries"
+     * "Buy groceries"                              →  "Buy groceries"  (unchanged)
      */
     private void sanitizeRequest(TaskRequestDTO requestDto) {
         requestDto.setTitle(sanitizationService.sanitize(requestDto.getTitle()));
