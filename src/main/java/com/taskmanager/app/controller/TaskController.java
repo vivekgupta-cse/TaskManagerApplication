@@ -21,9 +21,13 @@ public class TaskController {
     // GET /api/tasks → returns all tasks as a JSON array
     @GetMapping
     public ResponseEntity<Page<TaskResponseDTO>> getAllTasks(
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) Boolean completed,
             @PageableDefault(size = 10, sort = "header") Pageable pageable) {
-        // @PageableDefault provides sensible defaults if the user sends no params
-        return ResponseEntity.ok(taskService.getAllTasks(pageable));
+
+        // We pass the filters + the pageable object to the service
+        Page<TaskResponseDTO> tasks = taskService.getAllTasks(title, completed, pageable);
+        return ResponseEntity.ok(tasks);
     }
 
     // GET /api/tasks/{id} → returns a single task, or 404 if not found

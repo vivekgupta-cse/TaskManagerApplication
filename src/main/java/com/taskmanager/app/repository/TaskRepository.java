@@ -2,11 +2,12 @@ package com.taskmanager.app.repository;
 
 import com.taskmanager.app.model.Task;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 // JpaRepository<EntityClass, PrimaryKeyDataType>
 @Repository
-public interface TaskRepository extends JpaRepository<Task, Long> {
+public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificationExecutor<Task> {
     // Spring Boot generates all CRUD (Create, Read, Update, Delete) methods for you!
     // No code needed! Spring Data JPA generates everything.
 

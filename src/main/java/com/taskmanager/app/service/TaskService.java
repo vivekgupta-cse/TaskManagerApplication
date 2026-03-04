@@ -7,9 +7,11 @@ import com.taskmanager.app.exception.TaskNotFoundException;
 import com.taskmanager.app.mapper.TaskMapper;
 import com.taskmanager.app.model.Task;
 import com.taskmanager.app.repository.TaskRepository;
+import com.taskmanager.app.specification.TaskSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +24,11 @@ public class TaskService {
     private final SanitizationService sanitizationService; // injected by Spring
 
     // READ ALL
-    public Page<TaskResponseDTO> getAllTasks(Pageable pageable) {
-        // taskRepository.findAll(pageable) returns a Page<Task>
-        // We map each Task entity to a TaskResponseDTO
-        return taskRepository.findAll(pageable)
+    public Page<TaskResponseDTO> getAllTasks(String title, Boolean completed, Pageable pageable) {
+        Specification<Task> spec = Specification.where(TaskSpecifications.hasTitle(title))
+                .and(TaskSpecifications.isCompleted(completed));
+
+        return taskRepository.findAll(spec, pageable)
                 .map(taskMapper::toDTO);
     }
 
