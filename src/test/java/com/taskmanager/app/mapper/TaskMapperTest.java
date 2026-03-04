@@ -9,18 +9,24 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration test for TaskMapper (MapStruct-generated code).
- * <p>
- * We use @SpringBootTest to let Spring load the MapStruct-generated
- * TaskMapperImpl bean. The mapping logic is generated at compile-time,
- * so we just verify the field mappings are correct.
- * <p>
- * Note: Uses the test application.yaml (H2 in-memory DB) from src/test/resources.
+ * Tests for TaskMapper (MapStruct-generated code).
+ *
+ * We only need the MapStruct mapper bean — no DB, no JPA, no Flyway.
+ * Auto-configurations for DataSource, JPA, and Flyway are disabled via
+ * properties so this test runs without any database connection at all.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        "spring.autoconfigure.exclude=" +
+                "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
+                "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration," +
+                "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration," +
+                "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration"
+})
 class TaskMapperTest {
 
     @Autowired
@@ -47,22 +53,18 @@ class TaskMapperTest {
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
             assertThat(dto.getId()).isEqualTo(1L);
-            assertThat(dto.getTitle()).isEqualTo("Buy Groceries");  // header → title
+            assertThat(dto.getTitle()).isEqualTo("Buy Groceries");
             assertThat(dto.getDescription()).isEqualTo("Milk and eggs");
             assertThat(dto.isCompleted()).isFalse();
-            assertThat(dto.getCompletionStatus()).isEqualTo("PENDING");  // expression mapping
+            assertThat(dto.getCompletionStatus()).isEqualTo("PENDING");
         }
 
         @Test
         @DisplayName("maps completionStatus to DONE for a completed task")
         void mapsCompletionStatusToDoneForCompletedTask() {
             Task task = Task.builder()
-                    .id(2L)
-                    .header("Read Book")
-                    .description("Java Guide")
-                    .completed(true)
-                    .deleted(false)
-                    .build();
+                    .id(2L).header("Read Book").description("Java Guide")
+                    .completed(true).deleted(false).build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -73,13 +75,8 @@ class TaskMapperTest {
         @Test
         @DisplayName("maps header (entity field) to title (DTO field)")
         void mapsHeaderToTitle() {
-            // The entity field is 'header', but the DTO field is 'title'
             Task task = Task.builder()
-                    .id(3L)
-                    .header("the-header-value")
-                    .completed(false)
-                    .deleted(false)
-                    .build();
+                    .id(3L).header("the-header-value").completed(false).deleted(false).build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
@@ -90,16 +87,26 @@ class TaskMapperTest {
         @DisplayName("maps null description correctly")
         void mapsNullDescriptionCorrectly() {
             Task task = Task.builder()
-                    .id(4L)
-                    .header("No Description Task")
-                    .description(null)
-                    .completed(false)
-                    .deleted(false)
-                    .build();
+                    .id(4L).header("No Desc Task").description(null)
+                    .completed(false).deleted(false).build();
 
             TaskResponseDTO dto = taskMapper.toDTO(task);
 
             assertThat(dto.getDescription()).isNull();
+        }
+
+        @Test
+        @DisplayName("audit fields createdAt and lastModifiedAt are mapped")
+        void mapsAuditFields() {
+            LocalDateTime now = LocalDateTime.now();
+            Task task = Task.builder()
+                    .id(5L).header("Audit Task").completed(false).deleted(false)
+                    .createdAt(now).lastModifiedAt(now).build();
+
+            TaskResponseDTO dto = taskMapper.toDTO(task);
+
+            assertThat(dto.getCreatedAt()).isEqualTo(now);
+            assertThat(dto.getLastModifiedAt()).isEqualTo(now);
         }
     }
 
@@ -114,39 +121,31 @@ class TaskMapperTest {
         @DisplayName("maps all fields correctly")
         void mapsAllFieldsCorrectly() {
             TaskRequestDTO dto = TaskRequestDTO.builder()
-                    .title("Buy Groceries")
-                    .description("Milk and eggs")
-                    .completed(false)
-                    .build();
+                    .title("Buy Groceries").description("Milk and eggs").completed(false).build();
 
             Task task = taskMapper.toEntity(dto);
 
-            assertThat(task.getHeader()).isEqualTo("Buy Groceries");  // title → header
+            assertThat(task.getHeader()).isEqualTo("Buy Groceries");
             assertThat(task.getDescription()).isEqualTo("Milk and eggs");
             assertThat(task.isCompleted()).isFalse();
         }
 
         @Test
-        @DisplayName("id is always null (DB generates it — never from client)")
+        @DisplayName("id is always null — DB generates it, never from client")
         void idIsAlwaysNull() {
             TaskRequestDTO dto = TaskRequestDTO.builder()
-                    .title("Task Without ID")
-                    .description("desc")
-                    .completed(false)
-                    .build();
+                    .title("Task Without ID").description("desc").completed(false).build();
 
             Task task = taskMapper.toEntity(dto);
 
-            assertThat(task.getId()).isNull();  // @Mapping(target = "id", ignore = true)
+            assertThat(task.getId()).isNull();
         }
 
         @Test
         @DisplayName("maps title (DTO) to header (entity field)")
         void mapsTitleToHeader() {
             TaskRequestDTO dto = TaskRequestDTO.builder()
-                    .title("the-title-value")
-                    .completed(false)
-                    .build();
+                    .title("the-title-value").completed(false).build();
 
             Task task = taskMapper.toEntity(dto);
 
@@ -157,9 +156,7 @@ class TaskMapperTest {
         @DisplayName("maps completed=true correctly")
         void mapsCompletedTrueCorrectly() {
             TaskRequestDTO dto = TaskRequestDTO.builder()
-                    .title("Done Task")
-                    .completed(true)
-                    .build();
+                    .title("Done Task").completed(true).build();
 
             Task task = taskMapper.toEntity(dto);
 
@@ -167,4 +164,3 @@ class TaskMapperTest {
         }
     }
 }
-

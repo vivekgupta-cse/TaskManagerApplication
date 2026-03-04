@@ -26,17 +26,23 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-validation") // @Valid, @NotBlank, @Size
 	compileOnly("org.projectlombok:lombok")
 	annotationProcessor("org.projectlombok:lombok")
-	testImplementation("org.springframework.boot:spring-boot-starter-test")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-	testRuntimeOnly("com.h2database:h2")
+
 	runtimeOnly("org.postgresql:postgresql")
 
-	// ... other dependencies
-	implementation("org.mapstruct:mapstruct:1.6.0.Beta1") // Use latest for Java 25
-	annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1")
+	// Test dependencies
+	testImplementation("org.springframework.boot:spring-boot-starter-test")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testRuntimeOnly("org.postgresql:postgresql") // PostgreSQL driver needed at test runtime
 
-	// Crucial: MapStruct must work with Lombok
+	// Lombok in tests
+	testCompileOnly("org.projectlombok:lombok")
+	testAnnotationProcessor("org.projectlombok:lombok")
+
+	// MapStruct
+	implementation("org.mapstruct:mapstruct:1.6.0.Beta1")
+	annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1")
 	annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
+
 	implementation("org.owasp.antisamy:antisamy:1.7.4")
 
 	implementation("org.flywaydb:flyway-core")

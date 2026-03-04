@@ -19,39 +19,31 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for TaskService.
- * <p>
- * Strategy: Pure unit test — all collaborators (repository, mapper, sanitization)
- * are mocked with Mockito. No Spring context is loaded, so tests run in milliseconds.
+ * Pure unit tests for TaskService.
+ *
+ * All collaborators (repository, mapper, sanitizationService) are mocked.
+ * No Spring context, no DB, no Flyway — runs in milliseconds.
  */
+@SuppressWarnings("unchecked") // safe: Mockito any(Specification.class) requires raw type at runtime
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
 
-    @Mock
-    private TaskRepository taskRepository;
-
-    @Mock
-    private TaskMapper taskMapper;
-
-    @Mock
-    private SanitizationService sanitizationService;
+    @Mock private TaskRepository taskRepository;
+    @Mock private TaskMapper taskMapper;
+    @Mock private SanitizationService sanitizationService;
 
     @InjectMocks
     private TaskService taskService;
-
-    // -------------------------------------------------------------------------
-    // Common test fixtures
-    // -------------------------------------------------------------------------
 
     private Task sampleTask;
     private TaskResponseDTO sampleResponseDTO;
@@ -61,11 +53,10 @@ class TaskServiceTest {
     void setUp() {
         sampleTask = Task.builder()
                 .id(1L)
-                .header("Buy Groceries") // Note: using 'header' as per entity field name
+                .header("Buy Groceries")  // entity field is 'header', not 'title'
                 .description("Milk and eggs")
                 .completed(false)
                 .deleted(false)
-                // Audit fields are omitted; they will be null or can be set if needed
                 .build();
 
         sampleResponseDTO = new TaskResponseDTO();
@@ -83,69 +74,71 @@ class TaskServiceTest {
     }
 
     // =========================================================================
-    // getAllTasks()
+    // getAllTasks(String title, Boolean completed, Pageable pageable)
     // =========================================================================
     @Nested
     @DisplayName("getAllTasks()")
     class GetAllTasks {
 
         @Test
-        @DisplayName("returns all tasks as ResponseDTOs")
-        void returnsAllTasksAsDTOs() {
-            // 1. Arrange
+        @DisplayName("returns paged results mapped to ResponseDTOs")
+        void returnsPagedResultsAsDTOs() {
             Pageable pageable = PageRequest.of(0, 10);
-            Task task2 = Task.builder()
-                    .id(2L)
-                    .header("Read Book")    // Maps to the entity field name
-                    .description("Java 25")
-                    .completed(true)
-                    .deleted(false)
-                    .build();
-
+            Task task2 = Task.builder().id(2L).header("Read Book")
+                    .completed(true).deleted(false).build();
             TaskResponseDTO dto2 = new TaskResponseDTO();
-            dto2.setId(2L);
-            dto2.setTitle("Read Book");
-            dto2.setCompleted(true);
-            dto2.setCompletionStatus("DONE");
+            dto2.setId(2L); dto2.setTitle("Read Book");
+            dto2.setCompleted(true); dto2.setCompletionStatus("DONE");
 
-            // Wrap the entities in a Page object
             Page<Task> taskPage = new PageImpl<>(List.of(sampleTask, task2), pageable, 2);
 
-            // Mock must now use Pageable
-            when(taskRepository.findAll(any(Pageable.class))).thenReturn(taskPage);
+            // Service uses Specification-based findAll, not plain findAll(Pageable)
+            when(taskRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(taskPage);
             when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
             when(taskMapper.toDTO(task2)).thenReturn(dto2);
 
-            // 2. Act
-            Page<TaskResponseDTO> result = taskService.getAllTasks(pageable);
+            Page<TaskResponseDTO> result = taskService.getAllTasks(null, null, pageable);
 
-            // 3. Assert
-            assertThat(result.getContent()).hasSize(2); // Use .getContent() to access the list
+            assertThat(result.getContent()).hasSize(2);
             assertThat(result.getContent().get(0).getTitle()).isEqualTo("Buy Groceries");
             assertThat(result.getContent().get(1).getTitle()).isEqualTo("Read Book");
             assertThat(result.getTotalElements()).isEqualTo(2);
+            // Spec-based findAll was called, never the plain one
+            verify(taskRepository).findAll(any(Specification.class), eq(pageable));
+            verify(taskRepository, never()).findAll(eq(pageable));
         }
 
         @Test
-        @DisplayName("returns empty list when no tasks exist")
-        void returnsEmptyListWhenNoTasks() {
-            // 1. Arrange
+        @DisplayName("returns empty page when no tasks exist")
+        void returnsEmptyPage() {
             Pageable pageable = PageRequest.of(0, 10);
-            Page<Task> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+            when(taskRepository.findAll(any(Specification.class), eq(pageable)))
+                    .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
-            when(taskRepository.findAll(any(Pageable.class))).thenReturn(emptyPage);
+            Page<TaskResponseDTO> result = taskService.getAllTasks(null, null, pageable);
 
-            // 2. Act
-            Page<TaskResponseDTO> result = taskService.getAllTasks(pageable);
-
-            // 3. Assert
             assertThat(result.getContent()).isEmpty();
             assertThat(result.getTotalElements()).isZero();
+        }
+
+        @Test
+        @DisplayName("passes title and completed filters through to specification")
+        void passesFiltersToSpec() {
+            Pageable pageable = PageRequest.of(0, 10);
+            Page<Task> page = new PageImpl<>(List.of(sampleTask), pageable, 1);
+            when(taskRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
+            when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
+
+            // With title + completed filters — service still delegates to Specification
+            Page<TaskResponseDTO> result = taskService.getAllTasks("Buy", false, pageable);
+
+            assertThat(result.getContent()).hasSize(1);
+            verify(taskRepository).findAll(any(Specification.class), eq(pageable));
         }
     }
 
     // =========================================================================
-    // getTaskById()
+    // getTaskById(Long id)
     // =========================================================================
     @Nested
     @DisplayName("getTaskById()")
@@ -165,8 +158,8 @@ class TaskServiceTest {
         }
 
         @Test
-        @DisplayName("throws TaskNotFoundException when task is not found")
-        void throwsTaskNotFoundExceptionWhenMissing() {
+        @DisplayName("throws TaskNotFoundException when task does not exist")
+        void throwsWhenNotFound() {
             when(taskRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> taskService.getTaskById(99L))
@@ -176,7 +169,7 @@ class TaskServiceTest {
     }
 
     // =========================================================================
-    // createTask()
+    // createTask(TaskRequestDTO)
     // =========================================================================
     @Nested
     @DisplayName("createTask()")
@@ -184,11 +177,9 @@ class TaskServiceTest {
 
         @Test
         @DisplayName("creates and returns a task when title is unique")
-        void createsTaskWhenTitleIsUnique() {
-            // Sanitization returns the input unchanged
+        void createsTaskSuccessfully() {
             when(sanitizationService.sanitize("Buy Groceries")).thenReturn("Buy Groceries");
             when(sanitizationService.sanitize("Milk and eggs")).thenReturn("Milk and eggs");
-
             when(taskRepository.existsByHeaderAndCompletedFalse("Buy Groceries")).thenReturn(false);
             when(taskMapper.toEntity(sampleRequestDTO)).thenReturn(sampleTask);
             when(taskRepository.save(sampleTask)).thenReturn(sampleTask);
@@ -203,7 +194,7 @@ class TaskServiceTest {
 
         @Test
         @DisplayName("throws DuplicateTaskException when active task with same title exists")
-        void throwsDuplicateExceptionWhenTitleAlreadyExists() {
+        void throwsDuplicateException() {
             when(sanitizationService.sanitize(anyString())).thenAnswer(inv -> inv.getArgument(0));
             when(taskRepository.existsByHeaderAndCompletedFalse("Buy Groceries")).thenReturn(true);
 
@@ -211,7 +202,7 @@ class TaskServiceTest {
                     .isInstanceOf(DuplicateTaskException.class)
                     .hasMessageContaining("active task");
 
-            verify(taskRepository, never()).save(any());
+            verify(taskRepository, never()).save(any(Task.class));
         }
 
         @Test
@@ -221,15 +212,10 @@ class TaskServiceTest {
             String cleanTitle = "Buy Groceries";
 
             TaskRequestDTO dirtyRequest = TaskRequestDTO.builder()
-                    .title(dirtyTitle)
-                    .description("Safe description")
-                    .completed(false)
-                    .build();
+                    .title(dirtyTitle).description("Safe desc").completed(false).build();
 
             when(sanitizationService.sanitize(dirtyTitle)).thenReturn(cleanTitle);
-            when(sanitizationService.sanitize("Safe description")).thenReturn("Safe description");
-
-            // After sanitization, the DTO's title is updated to the clean value
+            when(sanitizationService.sanitize("Safe desc")).thenReturn("Safe desc");
             when(taskRepository.existsByHeaderAndCompletedFalse(cleanTitle)).thenReturn(false);
             when(taskMapper.toEntity(dirtyRequest)).thenReturn(sampleTask);
             when(taskRepository.save(sampleTask)).thenReturn(sampleTask);
@@ -237,36 +223,31 @@ class TaskServiceTest {
 
             taskService.createTask(dirtyRequest);
 
-            // Verify sanitize was called on the dirty input
             verify(sanitizationService).sanitize(dirtyTitle);
-            verify(sanitizationService).sanitize("Safe description");
-            // After sanitization the DTO's title must be the clean version
+            verify(sanitizationService).sanitize("Safe desc");
+            // DTO title is mutated to the clean version before duplicate check
             assertThat(dirtyRequest.getTitle()).isEqualTo(cleanTitle);
         }
 
         @Test
-        @DisplayName("sanitizes null description without error")
-        void sanitizesNullDescriptionWithoutError() {
-            TaskRequestDTO requestWithNullDesc = TaskRequestDTO.builder()
-                    .title("Buy Groceries")
-                    .description(null)
-                    .completed(false)
-                    .build();
+        @DisplayName("handles null description without error")
+        void handlesNullDescription() {
+            TaskRequestDTO req = TaskRequestDTO.builder()
+                    .title("Buy Groceries").description(null).completed(false).build();
 
             when(sanitizationService.sanitize("Buy Groceries")).thenReturn("Buy Groceries");
             when(sanitizationService.sanitize(null)).thenReturn(null);
             when(taskRepository.existsByHeaderAndCompletedFalse("Buy Groceries")).thenReturn(false);
-            when(taskMapper.toEntity(requestWithNullDesc)).thenReturn(sampleTask);
+            when(taskMapper.toEntity(req)).thenReturn(sampleTask);
             when(taskRepository.save(sampleTask)).thenReturn(sampleTask);
             when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
 
-            assertThatCode(() -> taskService.createTask(requestWithNullDesc))
-                    .doesNotThrowAnyException();
+            assertThatCode(() -> taskService.createTask(req)).doesNotThrowAnyException();
         }
     }
 
     // =========================================================================
-    // updateTask()
+    // updateTask(Long id, TaskRequestDTO)
     // =========================================================================
     @Nested
     @DisplayName("updateTask()")
@@ -275,19 +256,17 @@ class TaskServiceTest {
         @Test
         @DisplayName("updates all fields of an existing task")
         void updatesExistingTask() {
-            TaskRequestDTO updateRequest = TaskRequestDTO.builder()
+            TaskRequestDTO updateReq = TaskRequestDTO.builder()
                     .title("Buy Groceries Updated")
                     .description("Milk, eggs, and bread")
                     .completed(true)
                     .build();
 
-            Task updatedTask = Task.builder()
-                    .id(1L)
-                    .header("Buy Groceries Updated") // Use 'header' to match the Entity field
+            Task updatedTask = Task.builder().id(1L)
+                    .header("Buy Groceries Updated")
                     .description("Milk, eggs, and bread")
-                    .completed(true)
-                    .deleted(false)
-                    .build();
+                    .completed(true).deleted(false).build();
+
             TaskResponseDTO updatedDTO = new TaskResponseDTO();
             updatedDTO.setId(1L);
             updatedDTO.setTitle("Buy Groceries Updated");
@@ -300,12 +279,12 @@ class TaskServiceTest {
             when(taskRepository.save(sampleTask)).thenReturn(updatedTask);
             when(taskMapper.toDTO(updatedTask)).thenReturn(updatedDTO);
 
-            TaskResponseDTO result = taskService.updateTask(1L, updateRequest);
+            TaskResponseDTO result = taskService.updateTask(1L, updateReq);
 
             assertThat(result.getTitle()).isEqualTo("Buy Groceries Updated");
             assertThat(result.isCompleted()).isTrue();
             assertThat(result.getCompletionStatus()).isEqualTo("DONE");
-            // Verify entity fields were mutated before save
+            // Verify the entity was mutated in-place before save
             assertThat(sampleTask.getHeader()).isEqualTo("Buy Groceries Updated");
             assertThat(sampleTask.getDescription()).isEqualTo("Milk, eggs, and bread");
             assertThat(sampleTask.isCompleted()).isTrue();
@@ -313,7 +292,7 @@ class TaskServiceTest {
 
         @Test
         @DisplayName("throws TaskNotFoundException when task to update does not exist")
-        void throwsTaskNotFoundWhenUpdatingMissingTask() {
+        void throwsWhenNotFound() {
             when(sanitizationService.sanitize(anyString())).thenAnswer(inv -> inv.getArgument(0));
             when(taskRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -321,62 +300,56 @@ class TaskServiceTest {
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessageContaining("99");
 
-            verify(taskRepository, never()).save(any());
+            verify(taskRepository, never()).save(any(Task.class));
         }
 
         @Test
         @DisplayName("sanitizes input before updating")
-        void sanitizesInputBeforeUpdate() {
-            String dirtyTitle = "<b>Clean me</b>";
-            String cleanTitle = "Clean me";
+        void sanitizesBeforeUpdate() {
+            TaskRequestDTO dirtyReq = TaskRequestDTO.builder()
+                    .title("<b>Clean me</b>").description("desc").completed(false).build();
 
-            TaskRequestDTO dirtyRequest = TaskRequestDTO.builder()
-                    .title(dirtyTitle)
-                    .description("desc")
-                    .completed(false)
-                    .build();
-
-            when(sanitizationService.sanitize(dirtyTitle)).thenReturn(cleanTitle);
+            when(sanitizationService.sanitize("<b>Clean me</b>")).thenReturn("Clean me");
             when(sanitizationService.sanitize("desc")).thenReturn("desc");
             when(taskRepository.findById(1L)).thenReturn(Optional.of(sampleTask));
             when(taskRepository.save(sampleTask)).thenReturn(sampleTask);
             when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
 
-            taskService.updateTask(1L, dirtyRequest);
+            taskService.updateTask(1L, dirtyReq);
 
-            assertThat(dirtyRequest.getTitle()).isEqualTo(cleanTitle);
+            assertThat(dirtyReq.getTitle()).isEqualTo("Clean me");
         }
     }
 
     // =========================================================================
-    // deleteTask()
+    // deleteTask(Long id)
     // =========================================================================
     @Nested
     @DisplayName("deleteTask()")
     class DeleteTask {
 
         @Test
-        @DisplayName("deletes an existing task without error")
+        @DisplayName("soft-deletes an existing task without error")
         void deletesExistingTask() {
             when(taskRepository.findById(1L)).thenReturn(Optional.of(sampleTask));
             doNothing().when(taskRepository).delete(sampleTask);
 
-            assertThatCode(() -> taskService.deleteTask(1L))
-                    .doesNotThrowAnyException();
+            assertThatCode(() -> taskService.deleteTask(1L)).doesNotThrowAnyException();
 
             verify(taskRepository).delete(sampleTask);
         }
 
         @Test
         @DisplayName("throws TaskNotFoundException when task to delete does not exist")
-        void throwsTaskNotFoundWhenDeletingMissingTask() {
+        void throwsWhenNotFound() {
             when(taskRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> taskService.deleteTask(99L))
                     .isInstanceOf(TaskNotFoundException.class)
                     .hasMessageContaining("99");
 
-            verify(taskRepository, never()).delete(any());
+            // Specify Task.class to avoid ambiguity with JpaSpecificationExecutor.delete(Spec)
+            verify(taskRepository, never()).delete(any(Task.class));
         }
     }
 }

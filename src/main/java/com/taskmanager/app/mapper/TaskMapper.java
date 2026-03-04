@@ -19,7 +19,10 @@ public interface TaskMapper {
 
     // RequestDTO → Entity (for CREATE and UPDATE — client sends title, maps to header)
     @Mapping(source = "title", target = "header")  // title (client input) → header (Java field)
-    @Mapping(target = "id", ignore = true)
-    // id is always DB-generated, never from client
+    @Mapping(target = "id", ignore = true)          // id is always DB-generated, never from client
+    @Mapping(target = "deleted", ignore = true)     // defaults to false via @Builder.Default; never set by client
+    @Mapping(target = "createdAt", ignore = true)   // set automatically by @CreatedDate (JPA auditing)
+    @Mapping(target = "lastModifiedAt", ignore = true) // set automatically by @LastModifiedDate
+    @Mapping(target = "deletedAt", ignore = true)   // set by soft-delete SQL, never from client input
     Task toEntity(TaskRequestDTO dto);
 }

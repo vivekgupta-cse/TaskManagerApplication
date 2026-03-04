@@ -26,22 +26,21 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Unit tests for TaskController + GlobalExceptionHandler using MockMvc.
- * <p>
- * Uses standalone MockMvc with Mockito (no Spring test slices required).
+ * Pure unit tests for TaskController + GlobalExceptionHandler via standalone MockMvc.
+ *
+ * No Spring context, no DB, no Flyway — Mockito mocks TaskService entirely.
+ * Uses tools.jackson.databind.ObjectMapper (Spring Boot 4.x / Jackson 3.x).
  */
 @ExtendWith(MockitoExtension.class)
 class TaskControllerTest {
 
     private MockMvc mockMvc;
-
     private ObjectMapper objectMapper;
 
     @Mock
@@ -60,15 +59,11 @@ class TaskControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
 
-        // Add this line to handle pagination in tests
-        PageableHandlerMethodArgumentResolver pageableResolver = new PageableHandlerMethodArgumentResolver();
-
         mockMvc = MockMvcBuilders
                 .standaloneSetup(taskController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
-                // CRITICAL: This allows @GetMapping methods to receive Pageable
-                .setCustomArgumentResolvers(pageableResolver)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .build();
 
         objectMapper = new ObjectMapper();
@@ -95,34 +90,29 @@ class TaskControllerTest {
     class GetAllTasks {
 
         @Test
-        @DisplayName("returns 200 with paged list of tasks")
+        @DisplayName("returns 200 with paged list of tasks — no filters")
         void returns200WithAllTasks() throws Exception {
-            // 1. Arrange
             TaskResponseDTO dto2 = new TaskResponseDTO();
             dto2.setId(2L);
             dto2.setTitle("Read Book");
             dto2.setCompleted(true);
             dto2.setCompletionStatus("DONE");
 
-            // Wrap your list in a PageImpl object
-            List<TaskResponseDTO> dtoList = List.of(sampleResponse, dto2);
-            PageImpl<TaskResponseDTO> pagedResponse = new PageImpl<>(dtoList, PageRequest.of(0, 10), 2);
+            PageImpl<TaskResponseDTO> page = new PageImpl<>(
+                    List.of(sampleResponse, dto2), PageRequest.of(0, 10), 2);
 
-            // Mock the service to accept any Pageable and return the pagedResponse
-            when(taskService.getAllTasks(any(Pageable.class))).thenReturn(pagedResponse);
+            // getAllTasks now takes (String title, Boolean completed, Pageable)
+            when(taskService.getAllTasks(isNull(), isNull(), any(Pageable.class))).thenReturn(page);
 
-            // 2. Act & Assert
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
                     .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                    // IMPORTANT: jsonPath must now start with $.content
                     .andExpect(jsonPath("$.content.length()").value(2))
                     .andExpect(jsonPath("$.content[0].id").value(1))
                     .andExpect(jsonPath("$.content[0].title").value("Buy Groceries"))
                     .andExpect(jsonPath("$.content[0].completionStatus").value("PENDING"))
                     .andExpect(jsonPath("$.content[1].title").value("Read Book"))
                     .andExpect(jsonPath("$.content[1].completionStatus").value("DONE"))
-                    // Extra: Verify pagination metadata exists
                     .andExpect(jsonPath("$.totalElements").value(2))
                     .andExpect(jsonPath("$.totalPages").value(1));
         }
@@ -130,21 +120,58 @@ class TaskControllerTest {
         @Test
         @DisplayName("returns 200 with empty content array when no tasks exist")
         void returns200WithEmptyArray() throws Exception {
-            // 1. Arrange
-            // Create an empty Page object with default page metadata
-            PageImpl<TaskResponseDTO> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10), 0);
+            PageImpl<TaskResponseDTO> emptyPage = new PageImpl<>(
+                    List.of(), PageRequest.of(0, 10), 0);
 
-            // Mock the service to accept any Pageable and return the empty page
-            when(taskService.getAllTasks(any(Pageable.class))).thenReturn(emptyPage);
+            when(taskService.getAllTasks(isNull(), isNull(), any(Pageable.class))).thenReturn(emptyPage);
 
-            // 2. Act & Assert
             mockMvc.perform(get(BASE_URL))
                     .andExpect(status().isOk())
-                    // Check that the 'content' field is an empty array
                     .andExpect(jsonPath("$.content").isArray())
                     .andExpect(jsonPath("$.content.length()").value(0))
-                    // Verify metadata shows zero total elements
                     .andExpect(jsonPath("$.totalElements").value(0));
+        }
+
+        @Test
+        @DisplayName("passes title query param to service")
+        void passesTitleFilter() throws Exception {
+            PageImpl<TaskResponseDTO> page = new PageImpl<>(
+                    List.of(sampleResponse), PageRequest.of(0, 10), 1);
+
+            when(taskService.getAllTasks(eq("Groceries"), isNull(), any(Pageable.class))).thenReturn(page);
+
+            mockMvc.perform(get(BASE_URL).param("title", "Groceries"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1));
+
+            verify(taskService).getAllTasks(eq("Groceries"), isNull(), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("passes completed query param to service")
+        void passesCompletedFilter() throws Exception {
+            PageImpl<TaskResponseDTO> page = new PageImpl<>(
+                    List.of(sampleResponse), PageRequest.of(0, 10), 1);
+
+            when(taskService.getAllTasks(isNull(), eq(false), any(Pageable.class))).thenReturn(page);
+
+            mockMvc.perform(get(BASE_URL).param("completed", "false"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1));
+
+            verify(taskService).getAllTasks(isNull(), eq(false), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("returns 500 with safe message for unexpected exceptions")
+        void returns500ForUnexpectedException() throws Exception {
+            when(taskService.getAllTasks(any(), any(), any(Pageable.class)))
+                    .thenThrow(new RuntimeException("DB connection lost"));
+
+            mockMvc.perform(get(BASE_URL))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(jsonPath("$.status").value(500))
+                    .andExpect(jsonPath("$.message").value("Something went wrong. Please try again later."));
         }
     }
 
@@ -170,8 +197,7 @@ class TaskControllerTest {
         @Test
         @DisplayName("returns 404 when task not found")
         void returns404WhenTaskNotFound() throws Exception {
-            when(taskService.getTaskById(99L))
-                    .thenThrow(new TaskNotFoundException(99L));
+            when(taskService.getTaskById(99L)).thenThrow(new TaskNotFoundException(99L));
 
             mockMvc.perform(get(BASE_URL + "/99"))
                     .andExpect(status().isNotFound())
@@ -205,22 +231,19 @@ class TaskControllerTest {
         @Test
         @DisplayName("returns 400 when title is blank")
         void returns400WhenTitleIsBlank() throws Exception {
-            TaskRequestDTO badRequest = TaskRequestDTO.builder()
-                    .title("")        // @NotBlank violation
-                    .description("desc")
-                    .completed(false)
-                    .build();
+            TaskRequestDTO bad = TaskRequestDTO.builder()
+                    .title("").description("desc").completed(false).build();
 
             mockMvc.perform(post(BASE_URL)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(badRequest)))
+                            .content(objectMapper.writeValueAsString(bad)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.status").value(400))
                     .andExpect(jsonPath("$.errors.title").exists());
         }
 
         @Test
-        @DisplayName("returns 400 when title is missing")
+        @DisplayName("returns 400 when title is missing entirely")
         void returns400WhenTitleIsMissing() throws Exception {
             String json = "{\"description\":\"desc\",\"completed\":false}";
 
@@ -232,17 +255,14 @@ class TaskControllerTest {
         }
 
         @Test
-        @DisplayName("returns 400 when title is too short")
+        @DisplayName("returns 400 when title is too short (< 3 chars)")
         void returns400WhenTitleTooShort() throws Exception {
-            TaskRequestDTO badRequest = TaskRequestDTO.builder()
-                    .title("AB")      // @Size(min=3) violation
-                    .description("desc")
-                    .completed(false)
-                    .build();
+            TaskRequestDTO bad = TaskRequestDTO.builder()
+                    .title("AB").description("desc").completed(false).build();
 
             mockMvc.perform(post(BASE_URL)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(badRequest)))
+                            .content(objectMapper.writeValueAsString(bad)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errors.title").exists());
         }
@@ -277,15 +297,15 @@ class TaskControllerTest {
         @Test
         @DisplayName("returns 400 when description exceeds 500 characters")
         void returns400WhenDescriptionTooLong() throws Exception {
-            TaskRequestDTO badRequest = TaskRequestDTO.builder()
+            TaskRequestDTO bad = TaskRequestDTO.builder()
                     .title("Valid Title")
-                    .description("A".repeat(501))  // @Size(max=500) violation
+                    .description("A".repeat(501))
                     .completed(false)
                     .build();
 
             mockMvc.perform(post(BASE_URL)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(badRequest)))
+                            .content(objectMapper.writeValueAsString(bad)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.errors.description").exists());
         }
@@ -337,9 +357,9 @@ class TaskControllerTest {
         }
 
         @Test
-        @DisplayName("returns 400 when update body is invalid")
+        @DisplayName("returns 400 when update body has blank title")
         void returns400ForInvalidUpdateBody() throws Exception {
-            String json = "{\"title\":\"\",\"completed\":false}";   // blank title
+            String json = "{\"title\":\"\",\"completed\":false}";
 
             mockMvc.perform(put(BASE_URL + "/1")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -376,32 +396,6 @@ class TaskControllerTest {
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.status").value(404))
                     .andExpect(jsonPath("$.message").value("Task with ID 99 not found"));
-        }
-    }
-
-    // =========================================================================
-    // GlobalExceptionHandler — generic 500
-    // =========================================================================
-    @Nested
-    @DisplayName("GlobalExceptionHandler — generic exception")
-    class GenericException {
-
-        @Test
-        @DisplayName("returns 500 with safe message for unexpected exceptions")
-        void returns500ForUnexpectedException() throws Exception {
-            // 1. Arrange: Use any(Pageable.class) because the controller now passes a Pageable object
-            when(taskService.getAllTasks(any(Pageable.class)))
-                    .thenThrow(new RuntimeException("DB connection lost"));
-
-            // 2. Act & Assert
-            mockMvc.perform(get(BASE_URL))
-                    .andExpect(status().isInternalServerError())
-                    // Adjust these jsonPaths to match the Map keys in your GlobalExceptionHandler
-                    .andExpect(jsonPath("$.timestamp").exists())
-                    .andExpect(jsonPath("$.message").value("Something went wrong. Please try again later."));
-
-            // Note: If your handler doesn't explicitly put "status" or "error" in the Map,
-            // remove those specific jsonPath checks to avoid assertion failures.
         }
     }
 }

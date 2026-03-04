@@ -39,6 +39,7 @@ public class Task {
     private boolean completed;                 // Cannot be NULL, defaults to false
 
     @Column(name = "deleted", nullable = false)
+    @Builder.Default                           // Tells @Builder to honour the = false initializer
     private boolean deleted = false;
 
     @CreatedDate
