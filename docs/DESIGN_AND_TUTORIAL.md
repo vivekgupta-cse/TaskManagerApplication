@@ -8,7 +8,7 @@
 
 ## Table of Contents
 
-> 📊 **This document contains 10 Mermaid diagrams.** If your viewer doesn't render them, open this file in GitHub, VS Code (with Mermaid extension), or any Mermaid-compatible Markdown viewer.
+> 📊 **This document contains 10 Mermaid diagrams.** If your viewer doesn't render them, open this file in GitHub, VS Code (with Mermaid extension), or any Mermaid-compatible Markdown viewer. See [Section 21](#21-about-the-diagrams--mermaid) for a full explanation of Mermaid.
 
 1. [Project Overview](#1-project-overview)
 2. [Architecture & Package Structure](#2-architecture--package-structure)
@@ -29,7 +29,8 @@
 17. [Testing Strategy](#17-testing-strategy)
 18. [Request Lifecycle — End-to-End Walkthrough](#18-request-lifecycle--end-to-end-walkthrough)
 19. [Key Design Decisions & Trade-offs](#19-key-design-decisions--trade-offs)
-20. [Annotation Reference](#20-annotation-reference)
+ 20. [Annotation Reference](#20-annotation-reference)
+21. [About the Diagrams — Mermaid](#21-about-the-diagrams--mermaid)
 
 ---
 
@@ -1773,6 +1774,228 @@ This is an intentional teaching pattern. In real projects, you'll encounter lega
 | `@Mapping(source, target)` | Map differently-named fields |
 | `@Mapping(target, expression)` | Compute a field via Java expression |
 | `@Mapping(target, ignore)` | Skip mapping this field |
+
+---
+
+## 21. About the Diagrams — Mermaid
+
+All the design diagrams in this document are written in **[Mermaid](https://mermaid.js.org/)** — a JavaScript-based diagramming and charting language that renders diagrams from Markdown-style text definitions.
+
+### 21.1 What Is Mermaid?
+
+Mermaid is an open-source tool that lets you create diagrams and visualisations using a simple, human-readable text syntax embedded directly inside Markdown files. Instead of using a graphical tool (like Visio, draw.io, or Lucidchart) and exporting an image, you write a short text description and the diagram is **rendered automatically** by compatible viewers.
+
+**Key characteristics:**
+
+| Aspect | Detail |
+|---|---|
+| **Type** | Text-to-diagram rendering engine |
+| **Language** | Declarative, domain-specific syntax (not a general-purpose programming language) |
+| **Rendering** | Client-side JavaScript — the text is parsed and rendered into SVG in the browser |
+| **Created by** | Knut Sveidqvist (first released ~2014) |
+| **License** | MIT (fully open-source) |
+| **Website** | [https://mermaid.js.org](https://mermaid.js.org/) |
+| **Live Editor** | [https://mermaid.live](https://mermaid.live/) |
+
+### 21.2 Why Mermaid for a Design Document?
+
+| Benefit | Explanation |
+|---|---|
+| **Version-controlled** | Diagrams are plain text, so they live in Git alongside the code. Every change shows up as a readable diff. |
+| **No external tools** | No need to install a diagramming application or manage exported image files. |
+| **Always in sync** | When you refactor the code, updating the diagram is a text edit in the same PR. |
+| **GitHub native** | GitHub renders Mermaid in Markdown files, issues, pull requests, and wikis out of the box (since 2022). |
+| **IDE support** | VS Code, IntelliJ IDEA (with Markdown plugins), and JetBrains IDEs render Mermaid natively or with a plugin. |
+
+### 21.3 How It Works
+
+In a Markdown file, you embed Mermaid code inside a fenced code block with the language identifier `mermaid`:
+
+````markdown
+```mermaid
+graph TD
+    A["Start"] --> B["Process"]
+    B --> C{"Decision?"}
+    C -- Yes --> D["Action"]
+    C -- No --> E["End"]
+```
+````
+
+When a compatible renderer (GitHub, VS Code, IntelliJ, etc.) encounters this block, it:
+
+1. **Parses** the text using the Mermaid grammar.
+2. **Generates** an SVG (Scalable Vector Graphics) image.
+3. **Renders** it inline in the document where the code block appears.
+
+If the viewer **does not** support Mermaid, the raw text is shown as a code block — still readable, but not graphical.
+
+### 21.4 Diagram Types Used in This Document
+
+Mermaid supports many diagram types. Here are the ones used in this design document:
+
+#### Flowcharts / Graphs (`graph TB` / `graph LR`)
+
+Used for: architecture diagrams, package structure, control flow.
+
+```
+graph TB          ← Top-to-Bottom direction
+graph LR          ← Left-to-Right direction
+```
+
+**Syntax highlights:**
+
+```mermaid
+graph LR
+    A["Node A"] --> B["Node B"]
+    A -- "labelled edge" --> C["Node C"]
+    B -. "dashed edge" .-> C
+    subgraph Group["Grouped Nodes"]
+        D["Node D"]
+        E["Node E"]
+    end
+```
+
+| Syntax | Meaning |
+|---|---|
+| `-->` | Solid arrow (dependency / flow) |
+| `-.->` | Dashed arrow (optional / test-only) |
+| `-- "label" -->` | Labelled edge |
+| `subgraph Name["Title"]` | Groups nodes visually |
+| `style NodeId fill:#color` | Inline CSS styling for a node |
+
+#### Sequence Diagrams (`sequenceDiagram`)
+
+Used for: request lifecycle / end-to-end walkthrough.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C->>S: HTTP Request
+    S-->>C: HTTP Response
+```
+
+| Syntax | Meaning |
+|---|---|
+| `participant X as Label` | Declares a participant with a display name |
+| `->>` | Synchronous message (solid arrow) |
+| `-->>` | Reply / return (dashed arrow) |
+| `Note over X,Y: text` | Annotation note spanning participants |
+| `rect rgb(r,g,b)` | Background highlight for a group of messages |
+| `alt / else / end` | Conditional branching |
+
+#### Class Diagrams (`classDiagram`)
+
+Used for: entity/DTO field mapping, showing class structure.
+
+```mermaid
+classDiagram
+    class Task {
+        +Long id
+        +String header
+        +getHeader() String
+    }
+```
+
+| Syntax | Meaning |
+|---|---|
+| `+` | Public visibility |
+| `-` | Private visibility |
+| `#` | Protected visibility |
+| `ClassA --> ClassB` | Association |
+| `ClassA ..|> InterfaceB` | Implementation (implements) |
+| `<<interface>>` | Stereotypes |
+
+### 21.5 Diagram Inventory in This Document
+
+This document contains the following **10 Mermaid diagrams**:
+
+| # | Section | Diagram Type | What It Shows |
+|---|---|---|---|
+| 1 | §1 Project Overview | `graph TB` | System context — all external components and their connections |
+| 2 | §2 Architecture | `graph TB` | Layered architecture (Controller → Service → Repository) |
+| 3 | §2 Package Structure | `graph LR` | Package tree visualised as a directed graph |
+| 4 | §5 DTOs | `classDiagram` | TaskRequestDTO vs TaskResponseDTO field comparison |
+| 5 | §6 Mapper | `graph LR` | MapStruct mapping flow from DTO ↔ Entity |
+| 6 | §8 Specifications | `graph TD` | Dynamic query construction with JPA Specifications |
+| 7 | §12 Exception Handling | `graph TD` | Exception hierarchy and handler routing |
+| 8 | §14 Flyway | `graph LR` | Migration version chain (V1 → V2 → V3) |
+| 9 | §18 Request Lifecycle | `sequenceDiagram` | Full end-to-end POST request walkthrough |
+| 10 | §18 Error Flow | `sequenceDiagram` | Error path: duplicate task exception flow |
+
+### 21.6 How to View the Diagrams
+
+| Platform | Support |
+|---|---|
+| **GitHub** (web) | ✅ Native — renders automatically in `.md` files, issues, PRs, wikis |
+| **VS Code** | ✅ Built-in Markdown preview renders Mermaid. For enhanced support install the *Markdown Preview Mermaid Support* extension. |
+| **IntelliJ IDEA / JetBrains IDEs** | ✅ Built-in Markdown plugin renders Mermaid (2023.2+). For older versions, install the *Mermaid* plugin. |
+| **Mermaid Live Editor** | ✅ Paste any diagram code at [mermaid.live](https://mermaid.live/) for instant rendering and export. |
+| **GitLab** | ✅ Native support in Markdown files |
+| **Notion** | ✅ Native support via `/mermaid` block |
+| **Plain text viewer** | ⚠️ Shows raw text — still readable but not graphical |
+
+### 21.7 Editing Diagrams
+
+To modify a diagram:
+
+1. **Locate** the ` ```mermaid ` code block in this Markdown file.
+2. **Edit** the text inside — the syntax is intuitive and self-documenting.
+3. **Preview** — Use your IDE's Markdown preview, or paste the block into [mermaid.live](https://mermaid.live/) for instant feedback.
+4. **Commit** — The diagram change is a simple text diff, reviewable in any pull request.
+
+**Example workflow — adding a new node to the architecture diagram:**
+
+```diff
+  graph TB
+      Client --> Controller
+      Controller --> Service
++     Service --> CacheLayer["Cache Layer"]
++     CacheLayer --> Repository
+-     Service --> Repository
+      Repository --> Database
+```
+
+### 21.8 Mermaid Syntax Quick Reference
+
+```
+%%  This is a Mermaid comment (not rendered)
+
+%% ─── FLOWCHART ───
+graph TD                            %% TD = Top-Down, LR = Left-Right
+    A["Label"] --> B["Label"]       %% solid arrow
+    A -. "text" .-> C              %% dashed arrow with label
+    subgraph Title                  %% group nodes
+        D --> E
+    end
+    style A fill:#6DB33F,color:#fff %% inline CSS
+
+%% ─── SEQUENCE DIAGRAM ───
+sequenceDiagram
+    participant A as Alice
+    A->>B: Message                  %% synchronous
+    B-->>A: Reply                   %% async / return
+    Note over A,B: Annotation
+    rect rgb(200,220,255)           %% highlight block
+        A->>B: Inside highlight
+    end
+
+%% ─── CLASS DIAGRAM ───
+classDiagram
+    class MyClass {
+        -String name                %% private field
+        +getName() String           %% public method
+    }
+    MyClass --> OtherClass : uses
+```
+
+### 21.9 Further Reading
+
+- **Official Docs:** [https://mermaid.js.org/intro/](https://mermaid.js.org/intro/)
+- **Syntax Reference:** [https://mermaid.js.org/syntax/flowchart.html](https://mermaid.js.org/syntax/flowchart.html)
+- **Live Editor:** [https://mermaid.live/](https://mermaid.live/)
+- **GitHub Blog — Mermaid Support:** [Include diagrams in your Markdown files with Mermaid](https://github.blog/2022-02-14-include-diagrams-in-your-markdown-files-with-mermaid/)
+- **VS Code Extension:** [Markdown Preview Mermaid Support](https://marketplace.visualstudio.com/items?itemName=bierner.markdown-mermaid)
 
 ---
 
