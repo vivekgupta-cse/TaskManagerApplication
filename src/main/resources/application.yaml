@@ -4,17 +4,23 @@ spring:
 
   datasource:
     url: jdbc:postgresql://localhost:5432/taskdb
-    username: docker
-    password: docker
+    username: ${DB_USERNAME:docker}
+    password: ${DB_PASSWORD:docker}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false             # Disabled — this prints to stdout only, bypassing the log file
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+      # This ensures JPA waits for Flyway even if the auto-detection fails
+      javax.persistence.schema-generation.database.action: none
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true # Useful when adding Flyway to an existing DB
 
   threads:
     virtual:

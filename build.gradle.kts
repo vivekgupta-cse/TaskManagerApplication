@@ -38,6 +38,9 @@ dependencies {
 	// Crucial: MapStruct must work with Lombok
 	annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 	implementation("org.owasp.antisamy:antisamy:1.7.4")
+
+	implementation("org.flywaydb:flyway-core")
+	implementation("org.flywaydb:flyway-database-postgresql") // Required for Postgres
 }
 
 tasks.withType<Test> {
