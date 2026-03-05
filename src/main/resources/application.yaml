@@ -29,6 +29,16 @@ spring:
 server:
   port: 9090
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+
+    jmx:
+      exposure:
+        include: health,info,metrics
+
 logging:
   file:
     name: logs/app.log          # Log file path — relative to project root
@@ -43,3 +53,4 @@ logging:
     org.hibernate.SQL: DEBUG                      # Logs the SQL queries (replaces show-sql: true)
     org.hibernate.orm.jdbc.bind: TRACE            # Logs the actual values bound to ? placeholders
 
+# Note: To enable the health endpoint, set management.endpoints.web.exposure.include=health,info

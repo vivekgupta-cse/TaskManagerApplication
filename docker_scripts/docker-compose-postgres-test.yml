@@ -1,0 +1,17 @@
+services:
+  db_test:
+    image: postgres:16
+    container_name: postgres-test
+    environment:
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+      POSTGRES_DB: taskdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - ../database/postgresql/test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U docker" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

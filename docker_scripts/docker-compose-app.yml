@@ -1,0 +1,29 @@
+services:
+  app:
+    image: taskmanager-app:latest
+    build:
+      context: ..
+      dockerfile: docker_scripts/Dockerfile
+      args:
+        BASE_RUNTIME_IMAGE: amazoncorretto:25
+    container_name: taskmanager-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/taskdb
+      SPRING_DATASOURCE_USERNAME: docker
+      SPRING_DATASOURCE_PASSWORD: docker
+      SPRING_FLYWAY_ENABLED: "true"
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+    ports:
+      - "9090:9090"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --timeout=2 --tries=1 http://localhost:9090/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# Note: using host bind mounts for DB data (./database/...) — no named volumes are defined.
