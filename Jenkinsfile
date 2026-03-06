@@ -107,16 +107,25 @@ pipeline {
                         echo "--- Cleaning up old images in ${ARTIFACT_REGISTRY} ---"
                         gcloud auth activate-service-account --key-file=\$GCP_KEY --quiet
 
-                        # List all image digests, sort by creation time (newest first), and skip the latest 5
-                        IMAGES_TO_DELETE=\$(gcloud artifacts docker images list ${ARTIFACT_REGISTRY} --sort-by=~CREATE_TIME --format='get(digest)' --limit=unlimited | tail -n +6)
+                        # List all images with their digests, sort by creation time (newest first), skip the latest 5, and construct full image references
+                        IMAGES_TO_DELETE=\$(gcloud artifacts docker images list ${ARTIFACT_REGISTRY} \\
+                            --sort-by=~CREATE_TIME \\
+                            --format="table(IMAGE,DIGEST)" \\
+                            --limit=unlimited | \\
+                            tail -n +2 | \\
+                            awk '{print \$1"@"\$2}' | \\
+                            tail -n +6)
 
                         if [ -z "\$IMAGES_TO_DELETE" ]; then
                             echo "No old images to delete. Found fewer than 5 images."
                         else
-                            echo "The following image digests will be deleted:"
+                            echo "The following images will be deleted:"
                             echo "\$IMAGES_TO_DELETE"
-                            # The command expects each image as a separate argument, so we use xargs
-                            echo "\$IMAGES_TO_DELETE" | xargs -r gcloud artifacts docker images delete --delete-tags --quiet
+                            # Delete each image one by one
+                            echo "\$IMAGES_TO_DELETE" | while read IMAGE; do
+                                echo "Deleting \$IMAGE"
+                                gcloud artifacts docker images delete "\$IMAGE" --delete-tags --quiet || echo "Failed to delete \$IMAGE"
+                            done
                             echo "--- Cleanup complete ---"
                         fi
                     """
