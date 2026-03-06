@@ -1,23 +1,26 @@
 pipeline {
     agent any
 
+    // NOTE: Removed the 'tools { jdk 'jdk-25' }' block to make the Jenkinsfile portable.
+    // If you prefer to use a named JDK installation, configure it in "Manage Jenkins -> Global Tool Configuration"
+    // and add a tools { jdk 'your-jdk-name' } block back.
+
     environment {
-        GCP_PROJECT_ID    = "task-manager-demo-489313"
-        REGION            = "us-central1"
-        REPO              = "task-repo"
-        IMAGE_NAME        = "task-manager"
-        CLOUD_RUN_SERVICE = "task-manager"
-        ARTIFACT_REGISTRY = "${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPO}/${IMAGE_NAME}"
+        GCP_PROJECT_ID     = "task-manager-demo-489313"
+        REGION             = "us-central1"
+        REPO               = "task-repo"
+        IMAGE_NAME         = "task-manager"
+        CLOUD_RUN_SERVICE  = "task-manager"
+        ARTIFACT_REGISTRY  = "${REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPO}/${IMAGE_NAME}"
         GCP_CREDENTIALS_ID = "gcp-service-account-json"
-        GITHUB_REPO       = "https://github.com/vivekgupta-cse/TaskManagerApplication.git"
-        GITHUB_BRANCH     = "main"
+        GITHUB_REPO        = "https://github.com/vivekgupta-cse/TaskManagerApplication.git"
+        GITHUB_BRANCH      = "main"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                // Always pull fresh from GitHub — never use local developer workspace
                 git branch: "${GITHUB_BRANCH}",
                     url: "${GITHUB_REPO}"
             }
@@ -25,16 +28,27 @@ pipeline {
 
         stage('Build Jar') {
             steps {
-                // Build the fat jar, skip tests here — tests run in the next stage
-                sh './gradlew clean bootJar -x test'
+                // Print Java info to help debugging environments that don't have a named JDK tool configured
+                sh 'echo "=== java info ===" && java -version || true && which java || true'
+                sh 'chmod +x ./gradlew || true'
+                sh './gradlew clean bootJar -x test --no-daemon --console=plain'
             }
         }
 
         stage('Test') {
             steps {
-                // Tests require a running Postgres — ensure docker-compose-postgres-test.yml
-                // is started on the Jenkins agent before this stage runs.
-                sh './gradlew test'
+                withCredentials([
+                    string(credentialsId: 'test-db-url',      variable: 'TEST_DB_URL'),
+                    string(credentialsId: 'test-db-username', variable: 'TEST_DB_USERNAME'),
+                    string(credentialsId: 'test-db-password', variable: 'TEST_DB_PASSWORD')
+                ]) {
+                    sh '''
+                        export SPRING_DATASOURCE_URL=$TEST_DB_URL
+                        export SPRING_DATASOURCE_USERNAME=$TEST_DB_USERNAME
+                        export SPRING_DATASOURCE_PASSWORD=$TEST_DB_PASSWORD
+                        ./gradlew test --no-daemon --console=plain
+                    '''
+                }
             }
             post {
                 always {
@@ -45,7 +59,8 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${ARTIFACT_REGISTRY}:${env.BUILD_ID} -t ${ARTIFACT_REGISTRY}:latest ."
+                // Use Dockerfile in docker_scripts/ but keep project root as context so build/libs/*.jar is reachable
+                sh "docker build -f docker_scripts/Dockerfile -t ${ARTIFACT_REGISTRY}:${env.BUILD_ID} -t ${ARTIFACT_REGISTRY}:latest ."
             }
         }
 
@@ -65,10 +80,10 @@ pipeline {
         stage('Deploy to Cloud Run') {
             steps {
                 withCredentials([
-                    file(credentialsId: "${GCP_CREDENTIALS_ID}",  variable: 'GCP_KEY'),
-                    string(credentialsId: 'db-url',               variable: 'DB_URL'),
-                    string(credentialsId: 'db-username',          variable: 'DB_USERNAME'),
-                    string(credentialsId: 'db-password',          variable: 'DB_PASSWORD')
+                    file(credentialsId: "${GCP_CREDENTIALS_ID}", variable: 'GCP_KEY'),
+                    string(credentialsId: 'db-url',              variable: 'DB_URL'),
+                    string(credentialsId: 'db-username',         variable: 'DB_USERNAME'),
+                    string(credentialsId: 'db-password',         variable: 'DB_PASSWORD')
                 ]) {
                     sh """
                         gcloud auth activate-service-account --key-file=\$GCP_KEY
@@ -80,6 +95,30 @@ pipeline {
                             --platform managed \
                             --allow-unauthenticated \
                             --set-env-vars="SPRING_DATASOURCE_URL=\${DB_URL},SPRING_DATASOURCE_USERNAME=\${DB_USERNAME},SPRING_DATASOURCE_PASSWORD=\${DB_PASSWORD}"
+                    """
+                }
+            }
+        }
+
+        stage('Prune Old Images') {
+            steps {
+                withCredentials([file(credentialsId: "${GCP_CREDENTIALS_ID}", variable: 'GCP_KEY')]) {
+                    sh """
+                        echo "--- Cleaning up old images in ${ARTIFACT_REGISTRY} ---"
+                        gcloud auth activate-service-account --key-file=\$GCP_KEY --quiet
+
+                        # List all image digests, sort by creation time (newest first), and skip the latest 5
+                        IMAGES_TO_DELETE=\$(gcloud artifacts docker images list ${ARTIFACT_REGISTRY} --sort-by=~CREATE_TIME --format='get(digest)' --limit=unlimited | tail -n +6)
+
+                        if [ -z "\$IMAGES_TO_DELETE" ]; then
+                            echo "No old images to delete. Found fewer than 5 images."
+                        else
+                            echo "The following image digests will be deleted:"
+                            echo "\$IMAGES_TO_DELETE"
+                            # The command expects each image as a separate argument, so we use xargs
+                            echo "\$IMAGES_TO_DELETE" | xargs -r gcloud artifacts docker images delete --delete-tags --quiet
+                            echo "--- Cleanup complete ---"
+                        fi
                     """
                 }
             }
