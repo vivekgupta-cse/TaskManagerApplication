@@ -83,16 +83,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
-    // This catches the RuntimeException we throw in AuthService
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
-        // Log the exception for debugging
-        log.warn("Runtime exception handled: {}", ex.getMessage(), ex);
-        Map<String, String> error = new HashMap<>();
-        error.put("message", ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST); // Returns 400 instead of 500
-    }
-
     // Catch-all for any other unexpected exception → 500 Internal Server Error
     // Never expose internal details (ex.getMessage()) to the client!
     @ExceptionHandler(Exception.class)

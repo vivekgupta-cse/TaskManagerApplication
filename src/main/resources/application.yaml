@@ -3,9 +3,10 @@ spring:
     name: TaskManagerApplication
 
   datasource:
+    #url: jdbc:postgresql://localhost:5432/taskdb
     url: jdbc:postgresql://localhost:5432/taskdb
     username: ${DB_USERNAME:docker}
-    password: ${DB_PASSWORD:docker}
+    password: ${DB_USERNAME:docker}
     driver-class-name: org.postgresql.Driver
 
   jpa:

@@ -106,6 +106,18 @@ Jenkins Deployment steps:
 
    docker run --name jenkins -p 8181:8080 -p 50000:50000 -v jenkins_home:/var/jenkins_home jenkins/jenkins:lts
 
+
+docker run --name jenkins \
+-p 8181:8080 -p 50000:50000 \
+-v jenkins_home:/var/jenkins_home \
+-v /var/run/docker.sock:/var/run/docker.sock \
+-v /usr/local/bin/docker:/usr/bin/docker:ro \
+-v /home/gvivek/.sdkman/candidates/java/current:/opt/host-jdk:ro \
+-v /usr/bin/gcloud:/usr/bin/gcloud:ro \
+-v /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk:ro \
+-d jenkins/jenkins:lts
+
+    
 3. To get initial password
 
     docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword 
