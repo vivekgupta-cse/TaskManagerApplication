@@ -52,12 +52,12 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql") // Required for Postgres
 
     // Spring Security
-    //implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-security")
 
     // JWT Support
-    implementation("io.jsonwebtoken:jjwt-api:0.11.5")
+    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.11.5") // for JSON parsing
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6") // for JSON parsing
 }
 
 tasks.withType<Test> {

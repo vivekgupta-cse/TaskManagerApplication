@@ -1,5 +1,7 @@
 package com.taskmanager.app.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -22,6 +24,8 @@ converted to JSON.
 
 @RestControllerAdvice // This catches exceptions across all controllers
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // Handles TaskNotFoundException specifically → 404 Not Found
     @ExceptionHandler(TaskNotFoundException.class)
@@ -79,10 +83,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
+    // This catches the RuntimeException we throw in AuthService
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
+        // Log the exception for debugging
+        log.warn("Runtime exception handled: {}", ex.getMessage(), ex);
+        Map<String, String> error = new HashMap<>();
+        error.put("message", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST); // Returns 400 instead of 500
+    }
+
     // Catch-all for any other unexpected exception → 500 Internal Server Error
     // Never expose internal details (ex.getMessage()) to the client!
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
+        // Log full stacktrace for unexpected exceptions
+        log.error("Unhandled exception caught: {}", ex.getMessage(), ex);
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),         // 500
                 HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(), // "Internal Server Error"
@@ -90,4 +106,51 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
+
+    /*
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        // Inspect root cause message for unique constraint related to task title
+        Throwable root = ex.getRootCause();
+        String message = root == null ? ex.getMessage() : root.getMessage();
+        if (message != null && message.contains("uc_task_title")) {
+            ErrorResponse error = ErrorResponse.builder()
+                    .status(HttpStatus.CONFLICT.value())
+                    .error(HttpStatus.CONFLICT.getReasonPhrase())
+                    .message("You already have an active task with this title!")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+        }
+        // Fallback: return generic 500 with logged details
+        log.error("Data integrity violation: {}", ex.getMessage(), ex);
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+                "Database error occurred. Please contact support."
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
+    @ExceptionHandler(jakarta.persistence.PersistenceException.class)
+    public ResponseEntity<ErrorResponse> handlePersistenceException(jakarta.persistence.PersistenceException ex) {
+        Throwable root = ex.getCause();
+        String message = root == null ? ex.getMessage() : root.getMessage();
+        if (message != null && message.contains("uc_task_title")) {
+            ErrorResponse error = ErrorResponse.builder()
+                    .status(HttpStatus.CONFLICT.value())
+                    .error(HttpStatus.CONFLICT.getReasonPhrase())
+                    .message("You already have an active task with this title!")
+                    .timestamp(LocalDateTime.now())
+                    .build();
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+        }
+        log.error("JPA persistence exception: {}", ex.getMessage(), ex);
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+                "Database error occurred. Please contact support."
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }*/
 }
