@@ -35,3 +35,26 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Private Documentation ###
+docs/
+
+### Sensitive Configuration Files ###
+task-manager-demo-489313-38f48fc27624.json
+*.json.key
+*-service-account.json
+
+### Local Development Configuration ###
+**/application-local.yaml
+**/application-local.yml
+
+### Database Data ###
+database/postgresql/data/
+database/postgresql/test-data/
+
+### Logs ###
+logs/
+
+## Local backup files ##
+**/**_bak
+

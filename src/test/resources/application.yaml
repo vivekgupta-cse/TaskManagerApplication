@@ -32,4 +32,3 @@ logging:
   level:
     root: WARN
     com.taskmanager: DEBUG
-
