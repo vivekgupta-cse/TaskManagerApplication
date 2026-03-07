@@ -5,9 +5,9 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
 }
 
-group = "com.example"
+group = "com.taskmanager"
 version = "0.0.1-SNAPSHOT"
-description = "Demo TaskManagerApplication for Spring Boot"
+description = "TaskManager Microservice"
 
 java {
     toolchain {
@@ -42,11 +42,11 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok")
 
     // MapStruct
-    implementation("org.mapstruct:mapstruct:1.6.0.Beta1")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.0.Beta1")
+    implementation("org.mapstruct:mapstruct:1.6.3")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
-    implementation("org.owasp.antisamy:antisamy:1.7.5")
+    implementation("org.owasp.antisamy:antisamy:1.7.8")
 
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql") // Required for Postgres
@@ -55,9 +55,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
 
     // JWT Support
-    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6") // for JSON parsing
+    implementation("io.jsonwebtoken:jjwt-api:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.13.0")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.13.0") // for JSON parsing
 }
 
 tasks.withType<Test> {
