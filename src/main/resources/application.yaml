@@ -54,3 +54,7 @@ logging:
     org.hibernate.orm.jdbc.bind: TRACE            # Logs the actual values bound to ? placeholders
 
 # Note: To enable the health endpoint, set management.endpoints.web.exposure.include=health,info
+
+jwt:
+  secret: ${JWT_SECRET:my-local-dev-secret-only}
+  expiry-seconds: 3600

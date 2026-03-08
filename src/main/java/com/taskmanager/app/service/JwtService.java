@@ -1,6 +1,8 @@
 package com.taskmanager.app.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.taskmanager.app.config.JwtConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -15,11 +17,17 @@ import java.util.Map;
 public class JwtService {
 
     // In production, move this to application.properties and rotate keys
-    private static final String SECRET = "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437";
+    // Provide a default so the application can start even if the property is not set.
+    private final JwtConfig jwtConfig;
+
+    @Value("${jwt.expiry-seconds}")
+    private long ttlSeconds;
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    // Token validity: 1 hour
-    private static final long TTL_SECONDS = 60 * 60;
+    public JwtService(JwtConfig jwtConfig) {
+        this.jwtConfig = jwtConfig;
+    }
 
     public String generateToken(String username) {
         try {
@@ -31,7 +39,7 @@ public class JwtService {
             Map<String, Object> payload = new HashMap<>();
             payload.put("sub", username);
             payload.put("iat", now);
-            payload.put("exp", now + TTL_SECONDS);
+            payload.put("exp", now + ttlSeconds);
 
             String headerJson = MAPPER.writeValueAsString(header);
             String payloadJson = MAPPER.writeValueAsString(payload);
@@ -40,7 +48,7 @@ public class JwtService {
             String payloadB64 = base64UrlEncode(payloadJson.getBytes(StandardCharsets.UTF_8));
 
             String signingInput = headerB64 + "." + payloadB64;
-            String signature = computeHmacSha256(signingInput, SECRET);
+            String signature = computeHmacSha256(signingInput, jwtConfig.getSecret());
 
             return signingInput + "." + signature;
         } catch (Exception ex) {
@@ -58,7 +66,7 @@ public class JwtService {
             String signatureB64 = parts[2];
 
             String signingInput = headerB64 + "." + payloadB64;
-            String expectedSig = computeHmacSha256(signingInput, SECRET);
+            String expectedSig = computeHmacSha256(signingInput, jwtConfig.getSecret());
             if (!constantTimeEquals(expectedSig, signatureB64)) {
                 throw new RuntimeException("Invalid JWT signature");
             }
