@@ -1,6 +1,8 @@
 package com.taskmanager.app.service;
 
 import com.taskmanager.app.dto.AuthRequestDTO;
+import com.taskmanager.app.exception.InvalidCredentialsException;
+import com.taskmanager.app.exception.UserAlreadyExistsException;
 import com.taskmanager.app.model.User;
 import com.taskmanager.app.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,7 @@ public class AuthService {
     public String register(AuthRequestDTO request) {
         // 1. Check if user exists
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
-            throw new RuntimeException("Username already exists");
+            throw new UserAlreadyExistsException(request.getUsername());
         }
 
         // 2. Hash the password before saving!
@@ -33,10 +35,10 @@ public class AuthService {
 
     public String login(AuthRequestDTO request) {
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Invalid username or password");
+            throw new InvalidCredentialsException();
         }
 
         try {

@@ -33,7 +33,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: '*'
+        include: 'health,info,metrics'
+
+  endpoint:
+    health:
+      show-details: when-authorized   # hide DB details from anonymous callers
 
     jmx:
       exposure:
@@ -49,7 +53,7 @@ logging:
       file-name-pattern: logs/app-%d{yyyy-MM-dd}.%i.log  # Rotated file naming
   level:
     root: INFO                                    # Default log level for everything
-    com.example.TaskManagerApplication: DEBUG     # Your code logs at DEBUG level
+    com.taskmanager.app: DEBUG                    # Your code logs at DEBUG level
     org.hibernate.SQL: DEBUG                      # Logs the SQL queries (replaces show-sql: true)
     org.hibernate.orm.jdbc.bind: TRACE            # Logs the actual values bound to ? placeholders
 

@@ -56,7 +56,19 @@ public class JwtService {
         }
     }
 
-    public String extractUsername(String token) {
+    /**
+     * Returns username only if the token has a valid signature AND is not expired.
+     * Catches all exceptions to return null rather than propagating.
+     */
+    public String extractUsernameIfTokenIsValid(String token) {
+        try {
+            return extractUsername(token); // already checks signature + expiry
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String extractUsername(String token) {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != 3) throw new IllegalArgumentException("Invalid JWT token format");
