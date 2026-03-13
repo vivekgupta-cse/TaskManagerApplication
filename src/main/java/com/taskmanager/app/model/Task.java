@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Entity                     // Hibernate: manage this class as a database table and creates table
 @Table(name = "tasks")      // The table will be named "tasks"
 //@Data                       // Lombok: generates getters, setters, toString, equals, hashCode
-@SQLDelete(sql = "UPDATE tasks SET deleted = true, deleted_at = NOW() WHERE id = ?") // Overrides DELETE command
+@SQLDelete(sql = "UPDATE tasks SET deleted = true, deleted_at = ? WHERE id = ?") // Overrides DELETE command
 @SQLRestriction("deleted = false") // Automatically filters all SELECT queries
 @Getter
 @Setter // Better than @Data for JPA entities

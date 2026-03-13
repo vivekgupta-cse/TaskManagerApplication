@@ -3,6 +3,7 @@ package com.taskmanager.app.controller;
 import com.taskmanager.app.dto.TaskRequestDTO;
 import com.taskmanager.app.dto.TaskResponseDTO;
 import com.taskmanager.app.service.TaskService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController               // = @Controller + @ResponseBody: auto-converts return values to JSON
 @RequestMapping("/api/tasks") // All endpoints in this class are prefixed with /api/tasks
 @RequiredArgsConstructor      // Lombok: generates constructor for all 'final' fields
+@Tag(name = "Tasks", description = "CRUD operations for tasks")
 public class TaskController {
 
     private final TaskService taskService; // Injected by Spring — never call 'new TaskService()'

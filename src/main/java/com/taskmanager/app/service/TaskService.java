@@ -15,6 +15,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service                   // Marks this as a Spring managed service bean
 @RequiredArgsConstructor   // Lombok: generates constructor for all 'final' fields
 public class TaskService {
@@ -114,6 +116,8 @@ public class TaskService {
     public void deleteTask(Long id) {
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new TaskNotFoundException(id));
-        taskRepository.delete(task);
+        task.setDeleted(true);
+        task.setDeletedAt(LocalDateTime.now());
+        taskRepository.save(task);
     }
 }
