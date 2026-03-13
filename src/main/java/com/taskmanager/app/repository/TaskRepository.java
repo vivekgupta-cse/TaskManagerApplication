@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 // JpaRepository<EntityClass, PrimaryKeyDataType>
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificationExecutor<Task> {
@@ -14,4 +16,5 @@ public interface TaskRepository extends JpaRepository<Task, Long>, JpaSpecificat
     // Spring parses this name to create:
     // SELECT COUNT(*) > 0 FROM tasks WHERE title = ? AND completed = false
     boolean existsByHeaderAndCompletedFalse(String header);
+    Optional<Task> findByHeader(String header);
 }

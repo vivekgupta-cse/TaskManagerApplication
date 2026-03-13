@@ -39,6 +39,12 @@ public class TaskService {
         return taskMapper.toDTO(task);
     }
 
+    public TaskResponseDTO getTaskByTitle(String title) {
+        Task task = taskRepository.findByHeader(title)
+                .orElseThrow(() -> new TaskNotFoundException(title));  // throws 404 if missing
+        return taskMapper.toDTO(task);
+    }
+
     // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
     @Transactional  // If anything fails, the whole operation is rolled back
     public TaskResponseDTO createTask(TaskRequestDTO requestDto) {

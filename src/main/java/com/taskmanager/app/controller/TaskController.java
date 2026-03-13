@@ -36,6 +36,12 @@ public class TaskController {
         return taskService.getTaskById(id);
     }
 
+    // GET /api/tasks?header=Buy%20Groceries → exact match by task title (header field)
+    @GetMapping(params = "title")
+    public TaskResponseDTO getTaskByTitle(@RequestParam String title) {
+        return taskService.getTaskByTitle(title);
+    }
+
     // POST /api/tasks → creates a new task, returns the saved task with DB-assigned id
     // @Valid triggers @NotBlank / @Size validation on TaskRequestDTO fields
     @PostMapping
