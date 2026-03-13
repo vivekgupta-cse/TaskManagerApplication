@@ -36,6 +36,15 @@ public class TaskController {
         return taskService.getTaskById(id);
     }
 
+    // GET /api/tasks/search?q=Grocery → fuzzy search: matches "Groceries", "Grocery", "Buy Groceries", etc.
+    // Uses PostgreSQL pg_trgm similarity — tolerates typos and partial words.
+    @GetMapping("/search")
+    public ResponseEntity<Page<TaskResponseDTO>> searchTasks(
+            @RequestParam String title,
+            @PageableDefault(size = 10, sort = "header") Pageable pageable) {
+        return ResponseEntity.ok(taskService.searchTasksByFuzzyTitle(title, pageable));
+    }
+
     // GET /api/tasks?header=Buy%20Groceries → exact match by task title (header field)
     @GetMapping(params = "title")
     public TaskResponseDTO getTaskByTitle(@RequestParam String title) {

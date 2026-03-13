@@ -45,6 +45,12 @@ public class TaskService {
         return taskMapper.toDTO(task);
     }
 
+    // FUZZY SEARCH — returns all tasks whose title is similar to the search term
+    public Page<TaskResponseDTO> searchTasksByFuzzyTitle(String searchTerm, Pageable pageable) {
+        Specification<Task> spec = Specification.where(TaskSpecifications.hasFuzzyTitle(searchTerm));
+        return taskRepository.findAll(spec, pageable).map(taskMapper::toDTO);
+    }
+
     // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
     @Transactional  // If anything fails, the whole operation is rolled back
     public TaskResponseDTO createTask(TaskRequestDTO requestDto) {
