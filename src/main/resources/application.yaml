@@ -33,15 +33,37 @@ management:
   endpoints:
     web:
       exposure:
-        include: 'health,info,metrics'
+        include: 'health,info,prometheus'
 
   endpoint:
     health:
       show-details: when-authorized   # hide DB details from anonymous callers
+      probes:
+        enabled: true
 
     jmx:
       exposure:
-        include: health,info,metrics
+        include: health,info
+
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+
+  tracing:
+    enabled: true
+    export:
+      otlp:
+        enabled: true
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.10}
+
+  otlp:
+    tracing:
+      transport: http
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
 
 
 # Note: To enable the health endpoint, set management.endpoints.web.exposure.include=health,info

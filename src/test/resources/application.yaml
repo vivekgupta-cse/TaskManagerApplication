@@ -34,5 +34,5 @@ logging:
     com.taskmanager: DEBUG
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:test-secret-for-ci-only}
   expiry-seconds: 3600

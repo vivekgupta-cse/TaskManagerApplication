@@ -317,5 +317,54 @@ server:
 This project is licensed under the MIT License - see the LICENSE file for details.
 ## Contact
 For questions or support, please open an issue on GitHub.
+
 ---
+
+## 🆕 Usage Instructions for Observability & Request ID Propagation (2026-03-16)
+
+### 1. X-Request-Id Propagation
+- Every HTTP request is checked for an `X-Request-Id` header.
+- If present, the same value is echoed in the response and used for logging/tracing.
+- If missing, a new UUID is generated, set in the response, and used for logging/tracing.
+- **How to use:**
+  - Clients may send `X-Request-Id` in requests for traceability.
+  - All responses will include `X-Request-Id`.
+
+### 2. Prometheus & Grafana for Local Observability
+- **Start Prometheus & Grafana:**
+  ```bash
+  docker compose -f docker_scripts/docker-compose-observability.yml up -d
+  ```
+- **Prometheus config:** Scrapes metrics from your app at `/actuator/prometheus` (see `docker_scripts/prometheus.yml`).
+- **Grafana:**
+  - Access at [http://localhost:3000](http://localhost:3000) (default admin password: `admin`).
+  - Add Prometheus as a data source (URL: `http://prometheus:9090` inside Docker, or `http://localhost:9091` from host).
+
+### 3. OpenTelemetry Collector (OTLP) for Tracing
+- **Start OTEL Collector:**
+  ```bash
+  docker compose -f docker_scripts/docker-compose-otel.yml up -d
+  ```
+- **Config:** Minimal config at `docker_scripts/otel-collector-config.yaml` using the OTEL `debug` exporter (prints traces to collector stdout).
+- **Point your app to the collector:**
+  ```bash
+  export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318/v1/traces"
+  # Then start your app as usual
+  ```
+- **Result:** Traces from your app will appear in the OTEL Collector logs.
+
+### 4. Example: Running Everything Together
+```bash
+# Start DB, App, Observability, and OTEL Collector
+# (in separate terminals or with multiple compose files)
+docker compose -f docker_scripts/docker-compose-postgres.yml up -d
+docker compose -f docker_scripts/docker-compose-app.yml up -d
+docker compose -f docker_scripts/docker-compose-observability.yml up -d
+docker compose -f docker_scripts/docker-compose-otel.yml up -d
+```
+
+---
+
+For more details, see the respective files in `docker_scripts/`.
+
 **Note**: Ensure you never commit sensitive information like passwords or API keys. Use environment variables or local configuration files (which are gitignored).
