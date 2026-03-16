@@ -43,19 +43,6 @@ management:
       exposure:
         include: health,info,metrics
 
-logging:
-  file:
-    name: logs/app.log          # Log file path — relative to project root
-  logback:
-    rollingpolicy:
-      max-file-size: 10MB       # Rotate when file reaches 10MB
-      max-history: 7            # Keep last 7 rotated files, delete older ones
-      file-name-pattern: logs/app-%d{yyyy-MM-dd}.%i.log  # Rotated file naming
-  level:
-    root: INFO                                    # Default log level for everything
-    com.taskmanager.app: DEBUG                    # Your code logs at DEBUG level
-    org.hibernate.SQL: DEBUG                      # Logs the SQL queries (replaces show-sql: true)
-    org.hibernate.orm.jdbc.bind: TRACE            # Logs the actual values bound to ? placeholders
 
 # Note: To enable the health endpoint, set management.endpoints.web.exposure.include=health,info
 

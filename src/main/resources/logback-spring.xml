@@ -23,9 +23,12 @@
         </encoder>
     </appender>
 
-    <!-- Application logging levels -->
-    <logger name="com.taskmanager.app" level="INFO"/>
+    <!-- Application logging levels (moved from application.yaml) -->
+    <logger name="com.taskmanager.app" level="DEBUG"/>
     <logger name="com.taskmanager.app.controller" level="DEBUG"/>
+    <!-- Hibernate logging similar to previous YAML configuration -->
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
 
     <root level="INFO">
         <appender-ref ref="STDOUT" />
