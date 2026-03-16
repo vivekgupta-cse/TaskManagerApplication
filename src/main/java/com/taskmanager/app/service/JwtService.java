@@ -16,6 +16,8 @@ import java.util.Map;
 @Service
 public class JwtService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(JwtService.class);
+
     // In production, move this to application.properties and rotate keys
     // Provide a default so the application can start even if the property is not set.
     private final JwtConfig jwtConfig;
@@ -52,6 +54,7 @@ public class JwtService {
 
             return signingInput + "." + signature;
         } catch (Exception ex) {
+            log.error("Failed to generate token for user={}", username, ex);
             throw new RuntimeException("Failed to generate authentication token", ex);
         }
     }
@@ -62,8 +65,11 @@ public class JwtService {
      */
     public String extractUsernameIfTokenIsValid(String token) {
         try {
-            return extractUsername(token); // already checks signature + expiry
+            String username = extractUsername(token); // already checks signature + expiry
+            log.debug("JWT validated for user={}", username);
+            return username;
         } catch (Exception e) {
+            log.debug("JWT validation failed: {}", e.getMessage());
             return null;
         }
     }

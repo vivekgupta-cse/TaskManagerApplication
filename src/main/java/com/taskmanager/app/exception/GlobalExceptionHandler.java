@@ -30,6 +30,7 @@ public class GlobalExceptionHandler {
     // Handles TaskNotFoundException specifically → 404 Not Found
     @ExceptionHandler(TaskNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleTaskNotFound(TaskNotFoundException ex) {
+        log.warn("Task not found: {}", ex.getMessage());
         ErrorResponse error = new ErrorResponse(
                 HttpStatus.NOT_FOUND.value(),       // 404
                 HttpStatus.NOT_FOUND.getReasonPhrase(), // "Not Found"
@@ -72,6 +73,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DuplicateTaskException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateTask(DuplicateTaskException ex) {
+        log.warn("Duplicate task request: {}", ex.getMessage());
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.CONFLICT.value()) // 409 Conflict
                 .error("Conflict")

@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 
@@ -21,36 +23,49 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor   // Lombok: generates constructor for all 'final' fields
 public class TaskService {
 
+    private static final Logger log = LoggerFactory.getLogger(TaskService.class);
+
     private final TaskRepository taskRepository;           // injected by Spring
     private final TaskMapper taskMapper;                   // injected by Spring
     private final SanitizationService sanitizationService; // injected by Spring
 
     // READ ALL
     public Page<TaskResponseDTO> getAllTasks(String title, Boolean completed, Pageable pageable) {
+        log.debug("getAllTasks service called title='{}' completed={} pageable={}", title, completed, pageable);
         Specification<Task> spec = Specification.where(TaskSpecifications.hasTitle(title))
                 .and(TaskSpecifications.isCompleted(completed));
 
-        return taskRepository.findAll(spec, pageable)
-                .map(taskMapper::toDTO);
+        Page<TaskResponseDTO> result = taskRepository.findAll(spec, pageable).map(taskMapper::toDTO);
+        log.debug("getAllTasks returning {} records (page {})", result.getNumberOfElements(), result.getNumber());
+        return result;
     }
 
     // READ ONE
     public TaskResponseDTO getTaskById(Long id) {
+        log.debug("getTaskById service called id={}", id);
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new TaskNotFoundException(id));  // throws 404 if missing
-        return taskMapper.toDTO(task);
+        TaskResponseDTO dto = taskMapper.toDTO(task);
+        log.debug("getTaskById returning {}", dto);
+        return dto;
     }
 
     public TaskResponseDTO getTaskByTitle(String title) {
+        log.debug("getTaskByTitle service called title={}", title);
         Task task = taskRepository.findByHeader(title)
                 .orElseThrow(() -> new TaskNotFoundException(title));  // throws 404 if missing
-        return taskMapper.toDTO(task);
+        TaskResponseDTO dto = taskMapper.toDTO(task);
+        log.debug("getTaskByTitle returning {}", dto);
+        return dto;
     }
 
     // FUZZY SEARCH — returns all tasks whose title is similar to the search term
     public Page<TaskResponseDTO> searchTasksByFuzzyTitle(String searchTerm, Pageable pageable) {
+        log.debug("searchTasksByFuzzyTitle called searchTerm='{}' pageable={}", searchTerm, pageable);
         Specification<Task> spec = Specification.where(TaskSpecifications.hasFuzzyTitle(searchTerm));
-        return taskRepository.findAll(spec, pageable).map(taskMapper::toDTO);
+        Page<TaskResponseDTO> page = taskRepository.findAll(spec, pageable).map(taskMapper::toDTO);
+        log.debug("searchTasksByFuzzyTitle returning {} results", page.getNumberOfElements());
+        return page;
     }
 
     // CREATE — accepts TaskRequestDTO (no id, no completionStatus from client)
@@ -61,11 +76,14 @@ public class TaskService {
 
         // Step 2: Business Validation (after sanitization, so we check the clean value)
         if (taskRepository.existsByHeaderAndCompletedFalse(requestDto.getTitle())) {
+            log.warn("Duplicate task prevented for title={}", requestDto.getTitle());
             throw new DuplicateTaskException("You already have an active task with this title!");
         }
         Task taskEntity = taskMapper.toEntity(requestDto); // RequestDTO → Entity (id is null, DB assigns it)
         Task savedTask = taskRepository.save(taskEntity); // INSERT into DB
-        return taskMapper.toDTO(savedTask);                // Entity → ResponseDTO (with DB-generated id)
+        TaskResponseDTO dto = taskMapper.toDTO(savedTask);                // Entity → ResponseDTO (with DB-generated id)
+        log.debug("createTask saved id={}", dto.getId());
+        return dto;
     }
 
     // UPDATE — accepts TaskRequestDTO (client cannot change the id via request body)
@@ -87,7 +105,9 @@ public class TaskService {
         Task updatedTask = taskRepository.save(existingTask);
 
         // Step 5: Return as ResponseDTO
-        return taskMapper.toDTO(updatedTask);
+        TaskResponseDTO dto = taskMapper.toDTO(updatedTask);
+        log.debug("updateTask saved id={}", dto.getId());
+        return dto;
     }
 
     // -------------------------------------------------------------------------
@@ -119,5 +139,6 @@ public class TaskService {
         task.setDeleted(true);
         task.setDeletedAt(LocalDateTime.now());
         taskRepository.save(task);
+        log.debug("deleteTask marked deleted id={}", id);
     }
 }
