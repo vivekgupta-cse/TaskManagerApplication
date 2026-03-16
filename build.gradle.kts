@@ -62,6 +62,8 @@ dependencies {
     implementation("com.bucket4j:bucket4j-core:8.10.1")
     implementation("com.github.ben-manes.caffeine:caffeine:3.2.3")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2")
+    // Structured JSON logging encoder for Logback
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 }
 
 tasks.withType<Test> {

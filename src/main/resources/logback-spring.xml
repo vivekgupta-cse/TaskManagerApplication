@@ -2,14 +2,30 @@
     <!-- default log file resolved from Spring property 'logging.file.name' or fallback -->
     <property name="LOG_FILE" value="${logging.file.name:-logs/app.log}" />
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%X{requestId}] [%X{user}] %logger{36} - %msg%n"/>
+    <!-- JSON message pattern reused by multiple encoders -->
+    <property name="LOG_JSON_PATTERN" value='{"level":"%level","thread":"%thread","logger":"%logger","message":"%message"}'/>
 
-    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
+    <!-- JSON Console Appender (structured logs) -->
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                    <timeZone>UTC</timeZone>
+                </timestamp>
+                <pattern>
+                    <pattern>${LOG_JSON_PATTERN}</pattern>
+                </pattern>
+                <mdc>
+                    <includeMdcKeyName>requestId</includeMdcKeyName>
+                    <includeMdcKeyName>user</includeMdcKeyName>
+                </mdc>
+                <stackTrace/>
+            </providers>
         </encoder>
     </appender>
 
-    <!-- Rolling file appender: rotate daily and by size -->
+    <!-- Rolling file appender with JSON encoder: rotate daily and by size -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_FILE}</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -18,9 +34,35 @@
             <maxHistory>7</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
-        <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                    <timeZone>UTC</timeZone>
+                </timestamp>
+                <pattern>
+                    <pattern>${LOG_JSON_PATTERN}</pattern>
+                </pattern>
+                <mdc>
+                    <includeMdcKeyName>requestId</includeMdcKeyName>
+                    <includeMdcKeyName>user</includeMdcKeyName>
+                </mdc>
+                <stackTrace/>
+            </providers>
         </encoder>
+    </appender>
+
+    <!-- Async wrappers to avoid blocking request threads on IO -->
+    <appender name="ASYNC_JSON_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="JSON_CONSOLE" />
+        <queueSize>5000</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+    </appender>
+
+    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="FILE" />
+        <queueSize>5000</queueSize>
+        <discardingThreshold>0</discardingThreshold>
     </appender>
 
     <!-- Application logging levels (moved from application.yaml) -->
@@ -31,8 +73,8 @@
     <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
 
     <root level="INFO">
-        <appender-ref ref="STDOUT" />
-        <appender-ref ref="FILE" />
+        <appender-ref ref="ASYNC_JSON_CONSOLE" />
+        <appender-ref ref="ASYNC_FILE" />
     </root>
 </configuration>
 
