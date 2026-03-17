@@ -353,6 +353,13 @@ For questions or support, please open an issue on GitHub.
   ```
 - **Result:** Traces from your app will appear in the OTEL Collector logs.
 
+- **Use one of these commands to view the logs:**
+  ```bash
+     docker logs otel-collector > otel.log 2>&1
+     docker compose -f docker_scripts/docker-compose-otel.yml logs -f
+  ```
+- You should be able to see the trace id and span id from app.log in the otel logs.
+
 ### 4. Example: Running Everything Together
 ```bash
 # Start DB, App, Observability, and OTEL Collector
