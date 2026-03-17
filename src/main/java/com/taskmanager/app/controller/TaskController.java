@@ -59,8 +59,10 @@ public class TaskController {
         return ResponseEntity.ok(page);
     }
 
-    // GET /api/tasks?header=Buy%20Groceries → exact match by task title (header field)
-    @GetMapping(params = "title")
+    // Exact-match lookup by title. Use a dedicated path to avoid colliding with
+    // the paged GET /api/tasks endpoint which accepts optional 'title' filter.
+    // GET /api/tasks/by-title?title=Buy%20Groceries
+    @GetMapping(path = "/by-title")
     public TaskResponseDTO getTaskByTitle(@RequestParam String title) {
         log.debug("getTaskByTitle called with title={}", title);
         TaskResponseDTO dto = taskService.getTaskByTitle(title);

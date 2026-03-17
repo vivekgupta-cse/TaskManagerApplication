@@ -39,6 +39,9 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("org.postgresql:postgresql") // PostgreSQL driver needed at test runtime
 
+    // In-memory database for tests to avoid requiring a real Postgres instance
+    testImplementation("com.h2database:h2")
+
     // Lombok in tests
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")

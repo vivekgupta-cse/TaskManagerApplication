@@ -331,12 +331,13 @@ class TaskServiceTest {
         @Test
         @DisplayName("soft-deletes an existing task without error")
         void deletesExistingTask() {
-            when(taskRepository.findById(1L)).thenReturn(Optional.of(sampleTask));
-            doNothing().when(taskRepository).delete(sampleTask);
+              when(taskRepository.findById(1L)).thenReturn(Optional.of(sampleTask));
+              when(taskRepository.save(any(Task.class))).thenReturn(sampleTask);
 
-            assertThatCode(() -> taskService.deleteTask(1L)).doesNotThrowAnyException();
+              assertThatCode(() -> taskService.deleteTask(1L)).doesNotThrowAnyException();
 
-            verify(taskRepository).delete(sampleTask);
+              // Soft-delete uses save() to persist the deleted flag
+              verify(taskRepository).save(argThat(t -> t.isDeleted()));
         }
 
         @Test
