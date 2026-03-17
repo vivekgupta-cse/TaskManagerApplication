@@ -175,6 +175,37 @@ class TaskControllerTest {
         }
     }
 
+    @Nested
+    @DisplayName("GET /api/tasks/search and /by-title")
+    class SearchAndByTitle {
+
+        @Test
+        @DisplayName("searchTasks returns paged results")
+        void searchTasksReturnsPaged() throws Exception {
+            PageImpl<TaskResponseDTO> page = new PageImpl<>(List.of(sampleResponse), PageRequest.of(0, 10), 1);
+            when(taskService.searchTasksByFuzzyTitle(eq("grocery"), any(Pageable.class))).thenReturn(page);
+
+            mockMvc.perform(get(BASE_URL + "/search").param("title", "grocery"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1));
+        }
+
+        @Test
+        @DisplayName("getTaskByTitle returns DTO when found and 404 otherwise")
+        void getTaskByTitle() throws Exception {
+            when(taskService.getTaskByTitle(eq("Buy Groceries"))).thenReturn(sampleResponse);
+
+            mockMvc.perform(get(BASE_URL + "/by-title").param("title", "Buy Groceries"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.title").value("Buy Groceries"));
+
+            when(taskService.getTaskByTitle(eq("Missing"))).thenThrow(new TaskNotFoundException("Missing"));
+
+            mockMvc.perform(get(BASE_URL + "/by-title").param("title", "Missing"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
     // =========================================================================
     // GET /api/tasks/{id}
     // =========================================================================

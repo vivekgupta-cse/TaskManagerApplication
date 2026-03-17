@@ -36,7 +36,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
             String ip = request.getRemoteAddr();
             Bucket bucket = buckets.get(ip, k ->
                     Bucket.builder()
-                            .addLimit(Bandwidth.simple(100, Duration.ofMinutes(1)))
+                            .addLimit(Bandwidth.simple(20, Duration.ofMinutes(1)))
                             .build());
             if (!bucket.tryConsume(1)) {
                 log.warn("Rate limit exceeded for IP={}", ip);

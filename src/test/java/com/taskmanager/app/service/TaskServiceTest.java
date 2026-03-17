@@ -168,6 +168,59 @@ class TaskServiceTest {
         }
     }
 
+            // =========================================================================
+            // getTaskByTitle(String title)
+            // =========================================================================
+            @Nested
+            @DisplayName("getTaskByTitle()")
+            class GetTaskByTitle {
+
+                @Test
+                @DisplayName("returns DTO when header match is found")
+                void returnsDtoWhenFound() {
+                    when(taskRepository.findByHeader("Buy Groceries")).thenReturn(Optional.of(sampleTask));
+                    when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
+
+                    TaskResponseDTO result = taskService.getTaskByTitle("Buy Groceries");
+
+                    assertThat(result).isNotNull();
+                    assertThat(result.getTitle()).isEqualTo("Buy Groceries");
+                }
+
+                @Test
+                @DisplayName("throws TaskNotFoundException when header not found")
+                void throwsWhenNotFound() {
+                    when(taskRepository.findByHeader("Missing")).thenReturn(Optional.empty());
+
+                    assertThatThrownBy(() -> taskService.getTaskByTitle("Missing"))
+                            .isInstanceOf(TaskNotFoundException.class)
+                            .hasMessageContaining("Missing");
+                }
+            }
+
+            // =========================================================================
+            // searchTasksByFuzzyTitle(String, Pageable)
+            // =========================================================================
+            @Nested
+            @DisplayName("searchTasksByFuzzyTitle()")
+            class SearchTasksByFuzzyTitle {
+
+                @Test
+                @DisplayName("returns paged DTO results for fuzzy search")
+                void returnsPagedResults() {
+                    Pageable pageable = PageRequest.of(0, 10);
+                    Page<Task> taskPage = new PageImpl<>(List.of(sampleTask), pageable, 1);
+
+                    when(taskRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(taskPage);
+                    when(taskMapper.toDTO(sampleTask)).thenReturn(sampleResponseDTO);
+
+                    Page<TaskResponseDTO> result = taskService.searchTasksByFuzzyTitle("grocery", pageable);
+
+                    assertThat(result.getTotalElements()).isEqualTo(1);
+                    verify(taskRepository).findAll(any(Specification.class), eq(pageable));
+                }
+            }
+
     // =========================================================================
     // createTask(TaskRequestDTO)
     // =========================================================================
