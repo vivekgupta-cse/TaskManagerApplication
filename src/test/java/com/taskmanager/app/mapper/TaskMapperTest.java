@@ -21,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * properties so this test runs without any database connection at all.
  */
 @SpringBootTest(properties = {
+        // Force loading test resources so main resources are not used during tests
+        "spring.config.location=classpath:/application-local.yaml",
         "spring.autoconfigure.exclude=" +
                 "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
                 "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration," +

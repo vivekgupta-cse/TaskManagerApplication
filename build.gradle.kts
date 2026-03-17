@@ -74,6 +74,9 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
     finalizedBy(tasks.jacocoTestReport) // report is always generated after tests run
+    // Ensure tests load test resources first (src/test/resources/application-local.yaml)
+    // so they don't accidentally connect to the real local DB defined in src/main/resources
+    systemProperty("spring.config.location", "classpath:/application-local.yaml")
 }
 
 tasks.jacocoTestReport {

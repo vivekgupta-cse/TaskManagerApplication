@@ -13,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
  *  - All Spring beans wired correctly
  */
 @SpringBootTest(properties = {
+        // Ensure tests load the test-specific application-local.yaml from src/test/resources
+        "spring.config.location=classpath:/application-local.yaml",
         "spring.autoconfigure.exclude=" +
                 "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
                 "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration," +
