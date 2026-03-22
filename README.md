@@ -1,9 +1,9 @@
 # Task Manager Application
 A production-grade Spring Boot REST API for task management with JWT authentication, PostgreSQL database, and comprehensive testing.
 
+## Plan (Currently under execution)
+![Design_Task_Manager.svg](Design_Task_Manager.svg)
 
-#Plan
-![[Design_Task_Manager.excalidraw.md]]
 
 ## Features
 - ✅ RESTful API for task CRUD operations
