@@ -1,4 +1,5 @@
 #!/bin/bash -x
+
 URL='http://localhost:9090'
 HEADER='Content-Type: application/json'
 

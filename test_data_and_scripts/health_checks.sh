@@ -1,4 +1,5 @@
 #!/bin/bash -x
+
 URL='http://localhost:9090'
 
 curl ${URL}/actuator/health
