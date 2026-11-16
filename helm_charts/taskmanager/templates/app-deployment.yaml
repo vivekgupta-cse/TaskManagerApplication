@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: taskmanager
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: taskmanager
+
+  template:
+    metadata:
+      labels:
+        app: taskmanager
+
+    spec:
+      containers:
+        - name: taskmanager
+          image: {{ .Values.app.image }}
+          imagePullPolicy: Never
+          ports:
+            - containerPort: {{ .Values.app.port }}
+
+          env:
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/taskdb
+            - name: DB_USERNAME
+              value: {{ .Values.postgres.username }}
+            - name: DB_PASSWORD
+              value: {{ .Values.postgres.password }}

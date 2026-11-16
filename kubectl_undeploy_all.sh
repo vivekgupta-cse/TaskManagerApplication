@@ -1,2 +1,5 @@
-kubectl delete all --all -n taskmanager
-kubectl delete pvc --all -n taskmanager
+#!/bin/bash -x
+
+NS=taskmanager
+kubectl delete all --all -n $NS
+kubectl delete pvc --all -n $NS
